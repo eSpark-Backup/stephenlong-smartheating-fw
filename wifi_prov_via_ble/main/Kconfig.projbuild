@@ -1,24 +1,46 @@
 menu "Example Configuration"
 
-    choice EXAMPLE_PROV_TRANSPORT
-        bool "Provisioning Transport"
-        default EXAMPLE_PROV_TRANSPORT_SOFTAP if IDF_TARGET_ESP32S2
-        default EXAMPLE_PROV_TRANSPORT_BLE
+    config EXAMPLE_SSID_SET_MAC
+        bool "Use MAC as SSID"
+        default y
         help
-            Wi-Fi provisioning component offers both, SoftAP and BLE transports. Choose any one.
+            Set SoftAP SSID as PROV_<MAC>.
 
-        config EXAMPLE_PROV_TRANSPORT_BLE
-            bool "BLE"
-            select BT_ENABLED
-            depends on !IDF_TARGET_ESP32S2
-        config EXAMPLE_PROV_TRANSPORT_SOFTAP
-            bool "Soft AP"
-    endchoice
+    config EXAMPLE_SSID
+        string "Wi-Fi SSID"
+        default "PROV_SSID"
+        depends on !EXAMPLE_SSID_SET_MAC
+        help
+            SSID (network name) for the example to connect to.
 
-    config EXAMPLE_PROV_TRANSPORT
-        int
-        default 1 if EXAMPLE_PROV_TRANSPORT_BLE
-        default 2 if EXAMPLE_PROV_TRANSPORT_SOFTAP
+    config EXAMPLE_PASS
+        string "Wi-Fi Password"
+        default "PROV_PASS"
+        help
+            Wi-Fi password (WPA or WPA2) for the example to use.
+
+    config EXAMPLE_USE_SEC_1
+        bool
+        default y
+        prompt "Use Security Version 1"
+        help
+            Security version 1 used Curve25519 key exchange for establishing
+            secure session between device and client during provisioning
+
+    config EXAMPLE_USE_POP
+        bool
+        depends on EXAMPLE_USE_SEC_1
+        default y
+        prompt "Use proof-of-possession"
+        help
+            Proof-of-possession can be optionally used to prove that the device is indeed
+            in possession of the user who is provisioning the device. This proof-of-possession
+            is internally used to generate the shared secret through key exchange.
+
+    config EXAMPLE_POP
+        string "Proof-of-possession"
+        default "abcd1234"
+        depends on EXAMPLE_USE_POP
 
     config EXAMPLE_RESET_PROVISIONED
         bool
@@ -28,35 +50,15 @@ menu "Example Configuration"
             This erases the NVS to reset provisioned status of the device on every reboot.
             Provisioned status is determined by the Wi-Fi STA configuration, saved on the NVS.
 
-    config EXAMPLE_RESET_PROV_MGR_ON_FAILURE
-        bool
-        default y
-        prompt "Reset provisioned credentials and state machine after session failure"
-        help
-            Enable reseting provisioned credentials and state machine after session failure.
-            This will restart the provisioning service after retries are exhausted.
-
-    config EXAMPLE_PROV_MGR_MAX_RETRY_CNT
-        int
+    config EXAMPLE_AP_RECONN_ATTEMPTS
+        int "Maximum AP connection attempts"
         default 5
-        prompt "Max retries before reseting provisioning state machine"
-        depends on EXAMPLE_RESET_PROV_MGR_ON_FAILURE
         help
-            Set the Maximum retry to avoid reconnecting to an inexistent AP or if credentials
-            are misconfigured. Provisioned credentials are erased and internal state machine
-            is reset after this threshold is reached.
+            Set the maximum connection attempts to perform when connecting to a Wi-Fi AP.
 
     config EXAMPLE_PROV_SHOW_QR
         bool "Show provisioning QR code"
         default y
         help
             Show the QR code for provisioning.
-
-    config EXAMPLE_PROV_USING_BLUEDROID
-        bool
-        depends on (BT_BLUEDROID_ENABLED && (IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S3))
-        select BT_BLE_42_FEATURES_SUPPORTED
-        default y
-        help
-            This enables BLE 4.2 features for Bluedroid.
 endmenu
