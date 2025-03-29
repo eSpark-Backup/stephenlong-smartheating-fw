@@ -114,6 +114,15 @@ esp_err_t get_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+void decode_plus_to_space(char *str) {
+    while (*str) {
+        if (*str == '+') {
+            *str = ' ';
+        }
+        str++;
+    }
+}
+
 esp_err_t post_handler(httpd_req_t *req) {
     char buf[100];
     int ret = httpd_req_recv(req, buf, sizeof(buf) - 1);
@@ -123,11 +132,13 @@ esp_err_t post_handler(httpd_req_t *req) {
     }
     buf[ret] = '\0';
 
-    /* Extract SSID and Password */
     char ssid[WIFI_SSID_MAX_LEN] = {0}, password[WIFI_PASS_MAX_LEN] = {0};
-    sscanf(buf, "ssid=%[^&]&password=%s", ssid, password);
+    httpd_query_key_value(buf, "ssid", ssid, sizeof(ssid));
+    httpd_query_key_value(buf, "password", password, sizeof(password));
 
     if (strlen(ssid) > 0 && strlen(password) > 0) {
+        decode_plus_to_space(ssid);
+        decode_plus_to_space(password);
         save_wifi_credentials(ssid, password);
         ESP_LOGI(TAG, "Received SSID: %s, Password: %s", ssid, password);
         httpd_resp_send(req, "WiFi credentials received. Rebooting...", HTTPD_RESP_USE_STRLEN);
