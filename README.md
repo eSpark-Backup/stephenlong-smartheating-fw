@@ -14,3 +14,13 @@
     "password": "xyz_password"
 }
 ```
+
+## Build Instructions
+- To build the project, download the project zip from the following link: [Download Link](https://mega.nz/file/WdxGla4B#1Je9ymL9tHM3FN-_onfRJI2DFWKOXPMozMmlD3qI4s4).
+- Unzip to your desired path and open project folder `wifi_prov_esp32c6_v5.4.1` in your vscode.
+- Run `idf.py build` to build your project.
+- Run `idf.py -p COMXX flash` to flash your esp32c6 chip.
+- Run `idf.py -p COMXX monitor` to monitor your serial monitor.
+- Else you can also run `idf.py -p COMXX flash monitor` to flash and monitor your serial monitor.
+- Once the Wifi Provisioning is done, to bring your controller in SoftAP provisioning mode you have to erase your esp32c6 chip with the following command, `idf.py -p COMXX erase-flash`.
+- However, you can always update your wifi credentials through ble since it is always turned on.
