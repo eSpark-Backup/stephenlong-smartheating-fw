@@ -218,21 +218,21 @@ static void start_softap_provisioning(void)
 
 /// Declare the static function
 static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-// static void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
+static void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
 
 #define GATTS_SERVICE_UUID_TEST_A 0x0EC3 // Wifi Prov
 #define GATTS_CHAR_UUID_TEST_A 0xFF01
 #define GATTS_NUM_HANDLE_TEST_A 4
 
-// const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-//                                   0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x6E};
+const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+                                  0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x6E};
 
-// const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-//                                   0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x6E};
+const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+                                  0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x6E};
 
-// const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-//                                        0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x6E};
-// #define GATTS_NUM_HANDLE_TEST_B      4
+const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+                                       0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x6E};
+#define GATTS_NUM_HANDLE_TEST_B      8
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
 
@@ -359,10 +359,15 @@ struct gatts_profile_inst
     uint16_t gatts_if;
     uint16_t app_id;
     uint16_t conn_id;
+
     uint16_t service_handle;
     esp_gatt_srvc_id_t service_id;
     uint16_t char_handle;
     esp_bt_uuid_t char_uuid;
+    uint16_t char1_handle;
+    esp_bt_uuid_t char1_uuid;
+
+
     esp_gatt_perm_t perm;
     esp_gatt_char_prop_t property;
     uint16_t descr_handle;
@@ -375,9 +380,9 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
         .gatts_cb = gatts_profile_a_event_handler,
         .gatts_if = ESP_GATT_IF_NONE,
     },
-    // [PROFILE_UART_APP_ID] = {
-    //     .gatts_cb = gatts_uart_event_handler,
-    //     .gatts_if = ESP_GATT_IF_NONE,
+    [PROFILE_UART_APP_ID] = {
+        .gatts_cb = gatts_uart_event_handler,
+        .gatts_if = ESP_GATT_IF_NONE, }
     };
 
 typedef struct
@@ -741,77 +746,108 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
     }
 }
 
-// static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
-//                                      esp_gatt_if_t gatts_if,
-//                                      esp_ble_gatts_cb_param_t *param)
-// {
-//     switch (event)
-//     {
-//     case ESP_GATTS_REG_EVT:
-//         ESP_LOGI(GATTS_TAG, "REGISTER_APP_EVT, status %d, app_id %d", param->reg.status, param->reg.app_id);
-//         gl_profile_tab[PROFILE_UART_APP_ID].service_id.is_primary = true;
-//         gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.inst_id = 0x00;
-//         gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_128;
-//         memcpy(gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.uuid.uuid.uuid128,
-//                uart_service_uuid, ESP_UUID_LEN_128);
+static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
+                                     esp_gatt_if_t gatts_if,
+                                     esp_ble_gatts_cb_param_t *param)
+{
+    switch (event)
+    {
+    case ESP_GATTS_REG_EVT:
+        ESP_LOGI(GATTS_TAG, "REGISTER_APP_EVT, status %d, app_id %d", param->reg.status, param->reg.app_id);
+        gl_profile_tab[PROFILE_UART_APP_ID].service_id.is_primary = true;
+        gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.inst_id = 0x00;
+        gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_128;
+        memcpy(gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.uuid.uuid.uuid128,
+               uart_service_uuid, ESP_UUID_LEN_128);
 
-//         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_UART_APP_ID].service_id,
-//                                      GATTS_NUM_HANDLE_TEST_B);
-//         break;
+        esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_UART_APP_ID].service_id,
+                                     GATTS_NUM_HANDLE_TEST_B);
+        break;
 
-//     case ESP_GATTS_CREATE_EVT:
-//         ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d, service_handle %d",
-//                  param->create.status, param->create.service_handle);
+    case ESP_GATTS_CREATE_EVT:
+        ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d, service_handle %d",
+                 param->create.status, param->create.service_handle);
 
-//         gl_profile_tab[PROFILE_UART_APP_ID].service_handle = param->create.service_handle;
-//         gl_profile_tab[PROFILE_A_APP_ID].char_uuid.len = ESP_UUID_LEN_128;
-//         memcpy(gl_profile_tab[PROFILE_UART_APP_ID].char_uuid.uuid.uuid128, uart_tx_uuid, ESP_UUID_LEN_128);
-//         esp_ble_gatts_start_service(gl_profile_tab[PROFILE_UART_APP_ID].service_handle);
+        gl_profile_tab[PROFILE_UART_APP_ID].service_handle = param->create.service_handle;
 
-//         esp_err_t add_char_ret = esp_ble_gatts_add_char(gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
-//             &gl_profile_tab[PROFILE_UART_APP_ID].char_uuid,
-//             ESP_GATT_PERM_WRITE | ESP_GATT_PERM_READ,
-//             ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
-//             NULL, NULL);
+        // Tx Characteristic
+        gl_profile_tab[PROFILE_A_APP_ID].char_uuid.len = ESP_UUID_LEN_128;
+        memcpy(gl_profile_tab[PROFILE_UART_APP_ID].char_uuid.uuid.uuid128, uart_tx_uuid, ESP_UUID_LEN_128);
 
-//         if (add_char_ret) {
-//             ESP_LOGE(GATTS_TAG, "UART PROFILE add char failed, error code = %x", add_char_ret);
-//         }
-//         break;
+        // Rx Characteristic
+        gl_profile_tab[PROFILE_A_APP_ID].char1_uuid.len = ESP_UUID_LEN_128;
+        memcpy(gl_profile_tab[PROFILE_UART_APP_ID].char1_uuid.uuid.uuid128, uart_rx_uuid, ESP_UUID_LEN_128);
 
-//     case ESP_GATTS_ADD_CHAR_EVT:
-//         gl_profile_tab[PROFILE_UART_APP_ID].char_handle = param->add_char.attr_handle;
-//         ESP_LOGI(GATTS_TAG, "UART PROFILE ADD_CHAR_EVT, attr_handle = %d", param->add_char.attr_handle);
-//         break;
+        esp_ble_gatts_start_service(gl_profile_tab[PROFILE_UART_APP_ID].service_handle);
 
-//     case ESP_GATTS_ADD_CHAR_DESCR_EVT:
-//         ESP_LOGI(GATTS_TAG, "ADD_DESCR_EVT, handle = %d", param->add_char_descr.attr_handle);
-//         break;
+        //Tx
+        esp_err_t add_tx_char_ret = esp_ble_gatts_add_char(gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
+            &gl_profile_tab[PROFILE_UART_APP_ID].char_uuid,
+            ESP_GATT_PERM_WRITE | ESP_GATT_PERM_READ,
+            // ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
+            ESP_GATT_CHAR_PROP_BIT_WRITE ,
+            // NULL, 
+            &gatts_demo_char1_val,
+            NULL);
 
-//     case ESP_GATTS_WRITE_EVT:
-//         ESP_LOGI(GATTS_TAG, "UART WRITE_EVT");
-//         if (!param->write.is_prep) {
-//             ESP_LOGI(GATTS_TAG, "Received data:");
-//             // esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
-//             esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
-//                                         gl_profile_tab[PROFILE_UART_APP_ID].char_handle,
-//                                         param->write.len, param->write.value, false);
-//         }
-//         break;
+        //Rx
+        esp_err_t add_rx_char_ret = esp_ble_gatts_add_char(gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
+                &gl_profile_tab[PROFILE_UART_APP_ID].char1_uuid,
+                ESP_GATT_PERM_WRITE | ESP_GATT_PERM_READ,
+                ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
+                // NULL, 
+                &gatts_demo_char1_val,
+                NULL);
 
-//     case ESP_GATTS_CONNECT_EVT:
-//         gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
-//         break;
+        if (add_tx_char_ret || add_rx_char_ret) { 
+            ESP_LOGE(GATTS_TAG, "UART PROFILE add char failed, error code = %x", add_tx_char_ret|add_rx_char_ret );
+        }
+        break;
 
-//     case ESP_GATTS_DISCONNECT_EVT:
-//         ESP_LOGI(GATTS_TAG, "DEVICE DISCONNECTED");
-//         esp_ble_gap_start_advertising(&adv_params);
-//         break;
+    case ESP_GATTS_ADD_CHAR_EVT:
 
-//     default:
-//         break;
-//     }
-// }
+        // gl_profile_tab[PROFILE_UART_APP_ID].char_handle = param->add_char.attr_handle; //tx
+        gl_profile_tab[PROFILE_UART_APP_ID].char1_handle = param->add_char.attr_handle; //rx
+
+        ESP_LOGI(GATTS_TAG, "UART PROFILE ADD_CHAR_EVT, attr_handle = %d", param->add_char.attr_handle);
+        
+        break;
+
+    case ESP_GATTS_ADD_CHAR_DESCR_EVT:
+        ESP_LOGI(GATTS_TAG, "ADD_DESCR_EVT, handle = %d", param->add_char_descr.attr_handle);
+        break;
+
+    case ESP_GATTS_WRITE_EVT:
+        ESP_LOGI(GATTS_TAG, "UART WRITE_EVT");
+        if (!param->write.is_prep) {
+            ESP_LOGI(GATTS_TAG, "Received data:");
+            esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
+            // esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
+            //                             gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
+            //                             param->write.len, param->write.value, false);
+        }
+        break;
+    case ESP_GATTS_EXEC_WRITE_EVT:
+         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
+         example_exec_write_event_env(&a_prepare_write_env, param);
+
+
+        
+        break;
+
+    case ESP_GATTS_CONNECT_EVT:
+        gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
+        break;
+
+    case ESP_GATTS_DISCONNECT_EVT:
+        ESP_LOGI(GATTS_TAG, "DEVICE DISCONNECTED");
+        esp_ble_gap_start_advertising(&adv_params);
+        break;
+
+    default:
+        break;
+    }
+}
 
 static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
@@ -894,12 +930,13 @@ static void start_ble_provisioning(void)
         return;
     }
 
-    // ret = esp_ble_gatts_app_register(PROFILE_UART_APP_ID);
-    // if (ret)
-    // {
-    //     ESP_LOGE(GATTS_TAG, "gatts app register error, error code = %x", ret);
-    //     return;
-    // }
+    ret = esp_ble_gatts_app_register(PROFILE_UART_APP_ID);
+    if (ret)
+    {
+        ESP_LOGE(GATTS_TAG, "gatts app register error, error code = %x", ret);
+        return;
+    }
+
     esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(500);
     if (local_mtu_ret)
     {
