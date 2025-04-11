@@ -38,6 +38,8 @@
 #define WIFI_TAG         "SoftAP"
 #define GATTS_TAG         "BLE"
 #define SSID_WIFI  "HERSCHEL_000001"
+#define PASS_WIFI   "12345678"
+
 
 static esp_err_t save_wifi_credentials(const char *ssid, const char *password)
 {
@@ -206,7 +208,7 @@ static void start_softap_provisioning(void)
             .max_connection = 4,
             .authmode = WIFI_AUTH_WPA2_PSK}};
     strncpy((char *)wifi_config.ap.ssid, SSID_WIFI, sizeof(wifi_config.ap.ssid));
-    strcpy((char *)wifi_config.ap.password, CONFIG_EXAMPLE_PASS);
+    strcpy((char *)wifi_config.ap.password, PASS_WIFI);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
@@ -225,13 +227,13 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t g
 #define GATTS_NUM_HANDLE_TEST_A 4
 
 const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-                                  0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x6E};
+                                  0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x7E};
 
 const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-                                  0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x6E};
+                                  0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x7E};
 
 const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-                                       0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x6E};
+                                       0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x7E};
 #define GATTS_NUM_HANDLE_TEST_B      8
 
 #define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
@@ -398,6 +400,7 @@ void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble
 
 void parse_ble_write_data(uint8_t *data, int len)
 {
+  
     char json_str[len + 1]; // Create a buffer with space for null terminator
     memcpy(json_str, data, len);
     json_str[len] = '\0'; // Ensure null termination
@@ -561,6 +564,7 @@ void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare
                    param->write.value,
                    param->write.len);
             prepare_write_env->prepare_len += param->write.len;
+
         }
         else
         {
@@ -635,6 +639,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 #endif
         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_A_APP_ID].service_id, GATTS_NUM_HANDLE_TEST_A);
         break;
+
     case ESP_GATTS_WRITE_EVT:
     {
         // ESP_LOGI(GATTS_TAG, "GATT_WRITE_EVT, conn_id %d, trans_id %d, handle %d", param->write.conn_id, param->write.trans_id, param->write.handle);
@@ -771,11 +776,11 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
         gl_profile_tab[PROFILE_UART_APP_ID].service_handle = param->create.service_handle;
 
         // Tx Characteristic
-        gl_profile_tab[PROFILE_A_APP_ID].char_uuid.len = ESP_UUID_LEN_128;
+        gl_profile_tab[PROFILE_UART_APP_ID].char_uuid.len = ESP_UUID_LEN_128;
         memcpy(gl_profile_tab[PROFILE_UART_APP_ID].char_uuid.uuid.uuid128, uart_tx_uuid, ESP_UUID_LEN_128);
 
         // Rx Characteristic
-        gl_profile_tab[PROFILE_A_APP_ID].char1_uuid.len = ESP_UUID_LEN_128;
+        gl_profile_tab[PROFILE_UART_APP_ID].char1_uuid.len = ESP_UUID_LEN_128;
         memcpy(gl_profile_tab[PROFILE_UART_APP_ID].char1_uuid.uuid.uuid128, uart_rx_uuid, ESP_UUID_LEN_128);
 
         esp_ble_gatts_start_service(gl_profile_tab[PROFILE_UART_APP_ID].service_handle);
@@ -785,7 +790,7 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
             &gl_profile_tab[PROFILE_UART_APP_ID].char_uuid,
             ESP_GATT_PERM_WRITE | ESP_GATT_PERM_READ,
             // ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
-            ESP_GATT_CHAR_PROP_BIT_WRITE ,
+            ESP_GATT_CHAR_PROP_BIT_WRITE  ,
             // NULL, 
             &gatts_demo_char1_val,
             NULL);
@@ -794,7 +799,7 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
         esp_err_t add_rx_char_ret = esp_ble_gatts_add_char(gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
                 &gl_profile_tab[PROFILE_UART_APP_ID].char1_uuid,
                 ESP_GATT_PERM_WRITE | ESP_GATT_PERM_READ,
-                ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
+                ESP_GATT_CHAR_PROP_BIT_NOTIFY,
                 // NULL, 
                 &gatts_demo_char1_val,
                 NULL);
@@ -806,38 +811,85 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
 
     case ESP_GATTS_ADD_CHAR_EVT:
 
-        // gl_profile_tab[PROFILE_UART_APP_ID].char_handle = param->add_char.attr_handle; //tx
+ 
+        // // gl_profile_tab[PROFILE_UART_APP_ID].char_handle = param->add_char.attr_handle; //tx
         gl_profile_tab[PROFILE_UART_APP_ID].char1_handle = param->add_char.attr_handle; //rx
 
         ESP_LOGI(GATTS_TAG, "UART PROFILE ADD_CHAR_EVT, attr_handle = %d", param->add_char.attr_handle);
         
+        esp_bt_uuid_t descr_uuid = {
+            .len = ESP_UUID_LEN_16,
+            .uuid = { .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG },
+        };
+    
+        esp_attr_value_t cccd_val = {
+            .attr_max_len = 2,
+            .attr_len = 2,
+            .attr_value = (uint8_t[]){0x00, 0x00},
+        };
+    
+        esp_ble_gatts_add_char_descr(
+                                      gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
+                                      &descr_uuid,
+                                      ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+                                      &cccd_val,
+                                      NULL);
+
         break;
 
     case ESP_GATTS_ADD_CHAR_DESCR_EVT:
+
+        gl_profile_tab[PROFILE_UART_APP_ID].descr_handle = param->add_char_descr.attr_handle;
         ESP_LOGI(GATTS_TAG, "ADD_DESCR_EVT, handle = %d", param->add_char_descr.attr_handle);
+        
+        break;
+
+    case ESP_GATTS_START_EVT:
+        // ESP_LOGI(GATTS_TAG, "SERVICE_START_EVT, status %d, service_handle %d\n",
+                //  param->start.status, param->start.service_handle);
         break;
 
     case ESP_GATTS_WRITE_EVT:
+
         ESP_LOGI(GATTS_TAG, "UART WRITE_EVT");
         if (!param->write.is_prep) {
             ESP_LOGI(GATTS_TAG, "Received data:");
             esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
-            // esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
-            //                             gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
-            //                             param->write.len, param->write.value, false);
+            esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
+                                        gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
+                                        param->write.len, param->write.value, false);
+
         }
+        example_write_event_env(gatts_if, &a_prepare_write_env, param);
+
         break;
+
     case ESP_GATTS_EXEC_WRITE_EVT:
+
+        ESP_LOGI(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
          esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
          example_exec_write_event_env(&a_prepare_write_env, param);
-
-
         
         break;
 
     case ESP_GATTS_CONNECT_EVT:
+        esp_ble_conn_update_params_t conn_params = {0};
+        memcpy(conn_params.bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+        /* For the IOS system, please reference the apple official documents about the ble connection parameters restrictions. */
+        conn_params.latency = 0;
+        conn_params.max_int = 0x20; // max_int = 0x20*1.25ms = 40ms
+        conn_params.min_int = 0x10; // min_int = 0x10*1.25ms = 20ms
+        conn_params.timeout = 400;  // timeout = 400*10ms = 4000ms
+        // ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
+                //  param->connect.conn_id,
+                //  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
+                //  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
         gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
+        // start sent the update connection parameters to the peer device.
+        esp_ble_gap_update_conn_params(&conn_params);
         break;
+        // gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
+        // break;
 
     case ESP_GATTS_DISCONNECT_EVT:
         ESP_LOGI(GATTS_TAG, "DEVICE DISCONNECTED");
