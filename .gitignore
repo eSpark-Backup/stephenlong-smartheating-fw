@@ -37,7 +37,7 @@ firmware/bootloader/subproject/*
 **/.idea
 
 
-dependencies.lock
+
 sdkconfig.old
 build.sh
 burn_id.sh
