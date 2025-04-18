@@ -50,20 +50,38 @@
 static const char *TAG = "gpio_isr";
 bool gpio_isr_handler_flag = false;
 
+
+typedef enum {
+    POWER_OFF,
+    REBOOT,
+    WIFI_UPDATE,
+    FACTORY_RESET,
+    READ_TEMP,
+    READ_INTERNAL_TEMP,
+    READ_RELAY_STATE,
+    SET_TARGET_TEMP,
+    SET_RELAYS,
+}BLECommands;
+
+BLECommands blecmd;
+
+char *cmdStringFetch[]  = {
+    "poweroff",
+    "reboot"
+};
+
+
+
 void start_softap_provisioning(void);
 
 // ISR handler
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
     gpio_isr_handler_flag=true;
-    // int pin = (int)(uintptr_t)arg;
 
-    // int level = gpio_get_level(pin);
-    // if (level == 1) {
-    //     ESP_EARLY_LOGI(TAG, "GPIO %d is HIGH", pin);
-    // } else {
-    //     ESP_EARLY_LOGI(TAG, "GPIO %d is LOW", pin);
-    // }
 }
+
+
+
 
 
 
@@ -434,6 +452,42 @@ static prepare_type_env_t a_prepare_write_env;
 void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 
+char * parse_JSON(uint8_t *data, int len , const char *property){
+
+     
+    char json_str[len + 1]; // Create a buffer with space for null terminator
+    memcpy(json_str, data, len);
+    json_str[len] = '\0'; // Ensure null termination
+
+    ESP_LOGI(GATTS_TAG, "Received JSON: %s", json_str);    
+    // Parse JSON
+    cJSON *json = cJSON_Parse(json_str);
+    if (json == NULL)
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to parse JSON");
+        return 0;
+    }
+
+    cJSON *property_JSON = cJSON_GetObjectItem(json, property);
+
+    
+    if (property_JSON && cJSON_IsString(property_JSON) && (property_JSON->valuestring != NULL))
+    {
+        ESP_LOGI(GATTS_TAG, "%s : %s", property , property_JSON->valuestring);
+        return(property_JSON->valuestring);
+    }
+    else
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to extract Property value");
+        return 0;
+    }
+}
+
+
+
+
+
+
 void parse_ble_write_data(uint8_t *data, int len)
 {
   
@@ -609,6 +663,26 @@ void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare
     }
 }
 
+void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param)
+{
+    if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
+    {
+        // parse_ble_write_data(prepare_write_env->prepare_buf, prepare_write_env->prepare_len);
+        char *cmd_value = parse_JSON( param->write.value, param->write.len , "cmd");
+
+    }
+    else
+    {
+        ESP_LOGI(GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
+    }
+    if (prepare_write_env->prepare_buf)
+    {
+        free(prepare_write_env->prepare_buf);
+        prepare_write_env->prepare_buf = NULL;
+    }
+    prepare_write_env->prepare_len = 0;
+}
+
 void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param)
 {
     if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
@@ -734,6 +808,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
         example_exec_write_event_env(&a_prepare_write_env, param);
         break;
+
     case ESP_GATTS_CREATE_EVT:
         // ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d,  service_handle %d\n", param->create.status, param->create.service_handle);
         gl_profile_tab[PROFILE_A_APP_ID].service_handle = param->create.service_handle;
@@ -891,6 +966,11 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
         if (!param->write.is_prep) {
             ESP_LOGI(GATTS_TAG, "Received data:");
             esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
+            char *cmd_value = parse_JSON( param->write.value, param->write.len , "cmd");
+
+            // ESP_LOGI(GATTS_TAG, "cmd : %s", property , property_JSON->valuestring);
+
+
             esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
                                         gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
                                         param->write.len, param->write.value, false);
@@ -904,7 +984,8 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
 
         ESP_LOGI(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
          esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-         example_exec_write_event_env(&a_prepare_write_env, param);
+        //  example_exec_write_event_env(&a_prepare_write_env, param);
+         uart_exec_write_event_env(&a_prepare_write_env,param);
         
         break;
 
