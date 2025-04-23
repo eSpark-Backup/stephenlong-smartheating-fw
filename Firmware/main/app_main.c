@@ -49,25 +49,33 @@
 #define GPIO_INPUT_PIN_SEL  (1ULL<<GPIO_INPUT_IO)
 static const char *TAG = "gpio_isr";
 bool gpio_isr_handler_flag = false;
+bool uart_cmd_handler_flag = false;
 
 
 typedef enum {
-    POWER_OFF,
-    REBOOT,
-    WIFI_UPDATE,
+    REBOOT = 1,
     FACTORY_RESET,
-    READ_TEMP,
+    WIFI_UPDATE,
     READ_INTERNAL_TEMP,
-    READ_RELAY_STATE,
+    READ_TEMP,
     SET_TARGET_TEMP,
+    READ_RELAY_STATE,
     SET_RELAYS,
+    MAX_BLE_CMDS
 }BLECommands;
 
 BLECommands blecmd;
+char* bleParameters[2] = {NULL, NULL};
 
 char *cmdStringFetch[]  = {
-    "poweroff",
-    "reboot"
+    "poweroff/reboot",
+    "FactoryReset",
+    "wifiUpdate",
+    "readInternalTemp",
+    "readTemp",
+    "setTargetTemp",
+    "readRelayState",
+    "setRelays",
 };
 
 
@@ -481,6 +489,98 @@ char * parse_JSON(uint8_t *data, int len , const char *property){
         ESP_LOGE(GATTS_TAG, "Failed to extract Property value");
         return 0;
     }
+}
+
+uint8_t parse_command(uint8_t *data, int len , const char *property){
+
+     
+    char json_str[len + 1]; // Create a buffer with space for null terminator
+    memcpy(json_str, data, len);
+    json_str[len] = '\0'; // Ensure null termination
+
+    ESP_LOGI(GATTS_TAG, "%s", json_str);
+
+    // Extract command
+    blecmd = (BLECommands)(uint8_t)json_str[0];
+    // if((blecmd >= MAX_BLE_CMDS) || (blecmd < 1)){
+    //     ESP_LOGE(GATTS_TAG, "Invalid command received: %X", blecmd);
+    //     return 0;
+    // }
+    // else
+    // {
+        ESP_LOGI(GATTS_TAG, "Command received: %s", cmdStringFetch[blecmd-1]);
+    // }
+
+    // Extract property value
+    switch (blecmd)
+    {
+    case REBOOT:
+    case FACTORY_RESET:
+    case READ_INTERNAL_TEMP:
+    case READ_TEMP:
+    case READ_RELAY_STATE:
+        break;
+
+    case WIFI_UPDATE:
+        uint8_t ssid_len = (uint8_t)(json_str[1]);
+        char* ssid = (char*)(malloc(ssid_len + 1));
+        if (!ssid) {
+            ESP_LOGE(GATTS_TAG, "Memory allocation failed for SSID!\n");
+            return 0;
+        }
+        memcpy(ssid, &json_str[2], ssid_len);
+        ssid[ssid_len] = '\0';
+
+        uint8_t pwd_len = (uint8_t)(json_str[2 + ssid_len]);
+        char* password = (char*)(malloc(pwd_len + 1));
+        if (!password) {
+            ESP_LOGE(GATTS_TAG, "Memory allocation failed for Password!\n");
+            free(ssid);
+            return 0;
+        }
+        memcpy(password, &json_str[3 + ssid_len], pwd_len);
+        password[pwd_len] = '\0';
+
+        if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
+            ESP_LOGE(GATTS_TAG, "WiFi credential parameters out of range.!\n");
+            // Clean up
+            free(ssid);
+            free(password);
+            return 0;
+        }
+
+        bleParameters[0] = ssid;
+        bleParameters[1] = password;
+        break;
+    case SET_TARGET_TEMP:
+        char* temp_h = (char*)(malloc(1));
+        char* temp_l = (char*)(malloc(1));
+        if (!temp_h || !temp_l) {
+            ESP_LOGE(GATTS_TAG, "Memory allocation failed for temprature parameters.!\n");
+            return 0;
+        }
+        memcpy(temp_h, &json_str[1], 1);
+        memcpy(temp_l, &json_str[2], 1);
+
+        bleParameters[0] = temp_h;
+        bleParameters[1] = temp_l;
+        break;
+    case SET_RELAYS:
+        char* relay_state = (char*)(malloc(1));
+        if (!relay_state) {
+            ESP_LOGE(GATTS_TAG, "Memory allocation failed for relay state parameter.!\n");
+            return 0;
+        }
+        memcpy(relay_state, &json_str[1], 1);
+        bleParameters[0] = relay_state;
+        break;
+    
+    default:
+        break;
+    }
+
+
+    return blecmd;
 }
 
 
@@ -939,8 +1039,7 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
             .attr_value = (uint8_t[]){0x00, 0x00},
         };
     
-        esp_ble_gatts_add_char_descr(
-                                      gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
+        esp_ble_gatts_add_char_descr( gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
                                       &descr_uuid,
                                       ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
                                       &cccd_val,
@@ -964,16 +1063,26 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
 
         ESP_LOGI(GATTS_TAG, "UART WRITE_EVT");
         if (!param->write.is_prep) {
-            ESP_LOGI(GATTS_TAG, "Received data:");
-            esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
-            char *cmd_value = parse_JSON( param->write.value, param->write.len , "cmd");
-
-            // ESP_LOGI(GATTS_TAG, "cmd : %s", property , property_JSON->valuestring);
-
-
-            esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
-                                        gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
-                                        param->write.len, param->write.value, false);
+            if(param->write.len > 0)
+            {
+                ESP_LOGI(GATTS_TAG, "Received data:");
+                esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
+                parse_command( param->write.value, param->write.len , "cmd");
+                if((blecmd < 1) || (blecmd >= MAX_BLE_CMDS)){
+                    uart_cmd_handler_flag = false;
+                }
+                else
+                {
+                    uart_cmd_handler_flag = true;
+                }
+    
+                // ESP_LOGI(GATTS_TAG, "cmd : %s", property , property_JSON->valuestring);
+    
+    
+                esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
+                                            gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
+                                            param->write.len, param->write.value, false);
+            }
 
         }
         example_write_event_env(gatts_if, &a_prepare_write_env, param);
@@ -1113,6 +1222,65 @@ static void start_ble_provisioning(void)
     }
 }
 
+void reset_device_and_erase_nvs()
+{
+    esp_err_t err;
+
+    // Erase all NVS partitions
+    err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        ESP_LOGE("RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI("RESET", "NVS erased, restarting device...");
+
+    // Restart the device
+    esp_restart();
+}
+
+void execute_command(void)
+{
+    switch (blecmd)
+    {
+    case WIFI_UPDATE:
+        ESP_LOGI(GATTS_TAG, "Updating WiFi credentials...");
+        save_wifi_credentials(bleParameters[0], bleParameters[1]);
+        // esp_restart();
+        // break;
+    case REBOOT:
+        ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        esp_restart();
+        break;
+    case FACTORY_RESET:
+        ESP_LOGW(GATTS_TAG, "Performing application reset...");
+        reset_device_and_erase_nvs();
+        break;
+    case READ_INTERNAL_TEMP:
+        ESP_LOGI(GATTS_TAG, "Reading internal temperature...");
+        break;
+    case READ_TEMP:
+        ESP_LOGI(GATTS_TAG, "Reading external temperature...");
+        break;
+    case READ_RELAY_STATE:
+        ESP_LOGI(GATTS_TAG, "Reading relay state...");
+        break;
+    case SET_TARGET_TEMP:
+        ESP_LOGI(GATTS_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
+        break;
+    case SET_RELAYS:
+        ESP_LOGI(GATTS_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
+        break;
+    
+    default:
+        ESP_LOGE(GATTS_TAG, "Invalid command received: %X", blecmd);
+        break;
+    }
+    free(bleParameters[0]);
+    free(bleParameters[1]);
+    uart_cmd_handler_flag = false;
+}
+
 void app_main(void)
 {
     gpio_config_t io_conf = {
@@ -1123,7 +1291,7 @@ void app_main(void)
     };
     gpio_config(&io_conf);
         // Install GPIO ISR service
-     gpio_install_isr_service(0);  // Use ESP_INTR_FLAG_DEFAULT or 0
+    gpio_install_isr_service(0);  // Use ESP_INTR_FLAG_DEFAULT or 0
     gpio_isr_handler_add(GPIO_INPUT_IO, gpio_isr_handler, (void*)(uintptr_t)GPIO_INPUT_IO);
     
     ESP_LOGI(TAG, "ISR set up on GPIO %d", GPIO_INPUT_IO);
@@ -1159,9 +1327,13 @@ void app_main(void)
         if(gpio_isr_handler_flag == true){
             start_softap_provisioning();
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));  // Delay for 1 second
+        if(uart_cmd_handler_flag)
+        {
+            execute_command();
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));  // Delay for 1 second
 
     }
 
+}
 
-}   
