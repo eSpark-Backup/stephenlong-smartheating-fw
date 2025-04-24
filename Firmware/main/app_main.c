@@ -34,40 +34,25 @@
 #include "esp_bt_device.h"
 #include "esp_gatt_common_api.h"
 
-#define EXAMPLE_AP_RECONN_ATTEMPTS CONFIG_EXAMPLE_AP_RECONN_ATTEMPTS
-
-#define WIFI_SSID_MAX_LEN 32
-#define WIFI_PASS_MAX_LEN 64
-
-#define WIFI_TAG         "SoftAP"
-#define GATTS_TAG         "BLE"
-#define SSID_WIFI  "HERSCHEL_000001"
-#define PASS_WIFI   "12345678"
+#include "defines.h"
 
 
-#define GPIO_INPUT_IO     4               // <-- Your GPIO pin
-#define GPIO_INPUT_PIN_SEL  (1ULL<<GPIO_INPUT_IO)
 static const char *TAG = "gpio_isr";
 bool gpio_isr_handler_flag = false;
 bool uart_cmd_handler_flag = false;
 
+/// Declare the static function
+static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
+static void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
+void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
+void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 
-typedef enum {
-    REBOOT = 1,
-    FACTORY_RESET,
-    WIFI_UPDATE,
-    READ_INTERNAL_TEMP,
-    READ_TEMP,
-    SET_TARGET_TEMP,
-    READ_RELAY_STATE,
-    SET_RELAYS,
-    MAX_BLE_CMDS
-}BLECommands;
 
 BLECommands blecmd;
 char* bleParameters[2] = {NULL, NULL};
 
 char *cmdStringFetch[]  = {
+    "NoCommand",
     "poweroff/reboot",
     "FactoryReset",
     "wifiUpdate",
@@ -79,6 +64,161 @@ char *cmdStringFetch[]  = {
 };
 
 
+const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+                                  0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x7E};
+
+const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+                                  0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x7E};
+
+const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+                                       0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x7E};
+
+
+static uint8_t char1_str[] = {0x11, 0x22, 0x33};
+static esp_gatt_char_prop_t a_property = 0;
+
+static esp_attr_value_t gatts_demo_char1_val =
+    {
+        .attr_max_len = GATTS_DEMO_CHAR_VAL_LEN_MAX,
+        .attr_len = sizeof(char1_str),
+        .attr_value = char1_str,
+};
+
+static uint8_t adv_config_done = 0;
+#define adv_config_flag (1 << 0)
+#define scan_rsp_config_flag (1 << 1)
+
+#ifdef CONFIG_SET_RAW_ADV_DATA
+static uint8_t raw_adv_data[] = {
+    0x02, 0x01, 0x06,       // Length 2, Data Type 1 (Flags), Data 1 (LE General Discoverable Mode, BR/EDR Not Supported)
+    0x02, 0x0a, 0xeb,       // Length 2, Data Type 10 (TX power leve), Data 2 (-21)
+    0x03, 0x03, 0xab, 0xcd, // Length 3, Data Type 3 (Complete 16-bit Service UUIDs), Data 3 (UUID)
+};
+static uint8_t raw_scan_rsp_data[] = { // Length 15, Data Type 9 (Complete Local Name), Data 1 (ESP_GATTS_DEMO)
+    0x0f, 0x09, 0x45, 0x53, 0x50, 0x5f, 0x47, 0x41, 0x54, 0x54, 0x53, 0x5f, 0x44,
+    0x45, 0x4d, 0x4f};
+#else
+
+static uint8_t adv_service_uuid128[32] = {
+    /* LSB <--------------------------------------------------------------------------------> MSB */
+    // first uuid, 16bit, [12],[13] is the value
+    0xfb,
+    0x34,
+    0x9b,
+    0x5f,
+    0x80,
+    0x00,
+    0x00,
+    0x80,
+    0x00,
+    0x10,
+    0x00,
+    0x00,
+    0xEE,
+    0x00,
+    0x00,
+    0x00,
+    // second uuid, 32bit, [12], [13], [14], [15] is the value
+    0xfb,
+    0x34,
+    0x9b,
+    0x5f,
+    0x80,
+    0x00,
+    0x00,
+    0x80,
+    0x00,
+    0x10,
+    0x00,
+    0x00,
+    0xFF,
+    0x00,
+    0x00,
+    0x00,
+};
+
+// The length of adv data must be less than 31 bytes
+// static uint8_t test_manufacturer[TEST_MANUFACTURER_DATA_LEN] =  {0x12, 0x23, 0x45, 0x56};
+// adv data
+static esp_ble_adv_data_t adv_data = {
+    .set_scan_rsp = false,
+    .include_name = true,
+    .include_txpower = false,
+    .min_interval = 0x0006, // slave connection min interval, Time = min_interval * 1.25 msec
+    .max_interval = 0x0010, // slave connection max interval, Time = max_interval * 1.25 msec
+    .appearance = 0x00,
+    .manufacturer_len = 0,       // TEST_MANUFACTURER_DATA_LEN,
+    .p_manufacturer_data = NULL, //&test_manufacturer[0],
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = sizeof(adv_service_uuid128),
+    .p_service_uuid = adv_service_uuid128,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+// scan response data
+static esp_ble_adv_data_t scan_rsp_data = {
+    .set_scan_rsp = true,
+    .include_name = true,
+    .include_txpower = true,
+    //.min_interval = 0x0006,
+    //.max_interval = 0x0010,
+    .appearance = 0x00,
+    .manufacturer_len = 0,       // TEST_MANUFACTURER_DATA_LEN,
+    .p_manufacturer_data = NULL, //&test_manufacturer[0],
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = sizeof(adv_service_uuid128),
+    .p_service_uuid = adv_service_uuid128,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+
+#endif /* CONFIG_SET_RAW_ADV_DATA */
+
+static esp_ble_adv_params_t adv_params = {
+    .adv_int_min = 0x20,
+    .adv_int_max = 0x40,
+    .adv_type = ADV_TYPE_IND,
+    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+    //.peer_addr            =
+    //.peer_addr_type       =
+    .channel_map = ADV_CHNL_ALL,
+    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+};
+
+struct gatts_profile_inst
+{
+    esp_gatts_cb_t gatts_cb;
+    uint16_t gatts_if;
+    uint16_t app_id;
+    uint16_t conn_id;
+
+    uint16_t service_handle;
+    esp_gatt_srvc_id_t service_id;
+    uint16_t char_handle;
+    esp_bt_uuid_t char_uuid;
+    uint16_t char1_handle;
+    esp_bt_uuid_t char1_uuid;
+
+
+    esp_gatt_perm_t perm;
+    esp_gatt_char_prop_t property;
+    uint16_t descr_handle;
+    esp_bt_uuid_t descr_uuid;
+};
+
+/* One gatt-based profile one app_id and one gatts_if, this array will store the gatts_if returned by ESP_GATTS_REG_EVT */
+static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
+    [PROFILE_A_APP_ID] = {
+        .gatts_cb = gatts_profile_a_event_handler,
+        .gatts_if = ESP_GATT_IF_NONE,
+    },
+    [PROFILE_UART_APP_ID] = {
+        .gatts_cb = gatts_uart_event_handler,
+        .gatts_if = ESP_GATT_IF_NONE, }
+};
+
+
+static prepare_type_env_t a_prepare_write_env;
 
 void start_softap_provisioning(void);
 
@@ -88,12 +228,35 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 
 }
 
-
-
-
-
-
-
+void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
+{
+    uint8_t resp[1 + ((len == 0) ? 1: len)];
+    ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: status %d", status);
+    ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: len %d", len);
+    
+    resp[0] = blecmd;
+    if(data != NULL)
+    {
+        ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: data %s", data);
+        memcpy(&resp[1], data, len);
+        ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: resp");
+        ESP_LOG_BUFFER_HEXDUMP(GATTS_TAG, resp, len + 1, ESP_LOG_INFO);
+    }
+    else
+    {
+        resp[1] = (status == ESP_OK) ? BLE_RESPONSE_SUCCESS : BLE_RESPONSE_FAIL;
+        ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: resp %02X %02X", resp[0], resp[1]);
+    }
+    
+    esp_err_t err = esp_ble_gatts_send_indicate(gl_profile_tab[PROFILE_UART_APP_ID].gatts_if,
+                                                gl_profile_tab[PROFILE_UART_APP_ID].conn_id,
+                                                gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
+                                                sizeof(resp), resp, false);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to send BLE notification, error code = %x", esp_err_to_name(err));
+    }
+}
 
 static esp_err_t save_wifi_credentials(const char *ssid, const char *password)
 {
@@ -280,186 +443,6 @@ static httpd_handle_t start_webserver(void)
     start_webserver();
 }
 
-/// Declare the static function
-static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-static void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-
-#define GATTS_SERVICE_UUID_TEST_A 0x0EC3 // Wifi Prov
-#define GATTS_CHAR_UUID_TEST_A 0xFF01
-#define GATTS_NUM_HANDLE_TEST_A 4
-
-const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-                                  0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x7E};
-
-const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-                                  0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x7E};
-
-const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
-                                       0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x7E};
-#define GATTS_NUM_HANDLE_TEST_B      8
-
-#define GATTS_DEMO_CHAR_VAL_LEN_MAX 0x40
-
-#define PREPARE_BUF_MAX_SIZE 1024
-
-static uint8_t char1_str[] = {0x11, 0x22, 0x33};
-static esp_gatt_char_prop_t a_property = 0;
-
-static esp_attr_value_t gatts_demo_char1_val =
-    {
-        .attr_max_len = GATTS_DEMO_CHAR_VAL_LEN_MAX,
-        .attr_len = sizeof(char1_str),
-        .attr_value = char1_str,
-};
-
-static uint8_t adv_config_done = 0;
-#define adv_config_flag (1 << 0)
-#define scan_rsp_config_flag (1 << 1)
-
-#ifdef CONFIG_SET_RAW_ADV_DATA
-static uint8_t raw_adv_data[] = {
-    0x02, 0x01, 0x06,       // Length 2, Data Type 1 (Flags), Data 1 (LE General Discoverable Mode, BR/EDR Not Supported)
-    0x02, 0x0a, 0xeb,       // Length 2, Data Type 10 (TX power leve), Data 2 (-21)
-    0x03, 0x03, 0xab, 0xcd, // Length 3, Data Type 3 (Complete 16-bit Service UUIDs), Data 3 (UUID)
-};
-static uint8_t raw_scan_rsp_data[] = { // Length 15, Data Type 9 (Complete Local Name), Data 1 (ESP_GATTS_DEMO)
-    0x0f, 0x09, 0x45, 0x53, 0x50, 0x5f, 0x47, 0x41, 0x54, 0x54, 0x53, 0x5f, 0x44,
-    0x45, 0x4d, 0x4f};
-#else
-
-static uint8_t adv_service_uuid128[32] = {
-    /* LSB <--------------------------------------------------------------------------------> MSB */
-    // first uuid, 16bit, [12],[13] is the value
-    0xfb,
-    0x34,
-    0x9b,
-    0x5f,
-    0x80,
-    0x00,
-    0x00,
-    0x80,
-    0x00,
-    0x10,
-    0x00,
-    0x00,
-    0xEE,
-    0x00,
-    0x00,
-    0x00,
-    // second uuid, 32bit, [12], [13], [14], [15] is the value
-    0xfb,
-    0x34,
-    0x9b,
-    0x5f,
-    0x80,
-    0x00,
-    0x00,
-    0x80,
-    0x00,
-    0x10,
-    0x00,
-    0x00,
-    0xFF,
-    0x00,
-    0x00,
-    0x00,
-};
-
-// The length of adv data must be less than 31 bytes
-// static uint8_t test_manufacturer[TEST_MANUFACTURER_DATA_LEN] =  {0x12, 0x23, 0x45, 0x56};
-// adv data
-static esp_ble_adv_data_t adv_data = {
-    .set_scan_rsp = false,
-    .include_name = true,
-    .include_txpower = false,
-    .min_interval = 0x0006, // slave connection min interval, Time = min_interval * 1.25 msec
-    .max_interval = 0x0010, // slave connection max interval, Time = max_interval * 1.25 msec
-    .appearance = 0x00,
-    .manufacturer_len = 0,       // TEST_MANUFACTURER_DATA_LEN,
-    .p_manufacturer_data = NULL, //&test_manufacturer[0],
-    .service_data_len = 0,
-    .p_service_data = NULL,
-    .service_uuid_len = sizeof(adv_service_uuid128),
-    .p_service_uuid = adv_service_uuid128,
-    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-};
-// scan response data
-static esp_ble_adv_data_t scan_rsp_data = {
-    .set_scan_rsp = true,
-    .include_name = true,
-    .include_txpower = true,
-    //.min_interval = 0x0006,
-    //.max_interval = 0x0010,
-    .appearance = 0x00,
-    .manufacturer_len = 0,       // TEST_MANUFACTURER_DATA_LEN,
-    .p_manufacturer_data = NULL, //&test_manufacturer[0],
-    .service_data_len = 0,
-    .p_service_data = NULL,
-    .service_uuid_len = sizeof(adv_service_uuid128),
-    .p_service_uuid = adv_service_uuid128,
-    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-};
-
-#endif /* CONFIG_SET_RAW_ADV_DATA */
-
-static esp_ble_adv_params_t adv_params = {
-    .adv_int_min = 0x20,
-    .adv_int_max = 0x40,
-    .adv_type = ADV_TYPE_IND,
-    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
-    //.peer_addr            =
-    //.peer_addr_type       =
-    .channel_map = ADV_CHNL_ALL,
-    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
-};
-
-#define PROFILE_NUM 2
-#define PROFILE_A_APP_ID 0
-#define PROFILE_UART_APP_ID 1
-
-struct gatts_profile_inst
-{
-    esp_gatts_cb_t gatts_cb;
-    uint16_t gatts_if;
-    uint16_t app_id;
-    uint16_t conn_id;
-
-    uint16_t service_handle;
-    esp_gatt_srvc_id_t service_id;
-    uint16_t char_handle;
-    esp_bt_uuid_t char_uuid;
-    uint16_t char1_handle;
-    esp_bt_uuid_t char1_uuid;
-
-
-    esp_gatt_perm_t perm;
-    esp_gatt_char_prop_t property;
-    uint16_t descr_handle;
-    esp_bt_uuid_t descr_uuid;
-};
-
-/* One gatt-based profile one app_id and one gatts_if, this array will store the gatts_if returned by ESP_GATTS_REG_EVT */
-static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
-    [PROFILE_A_APP_ID] = {
-        .gatts_cb = gatts_profile_a_event_handler,
-        .gatts_if = ESP_GATT_IF_NONE,
-    },
-    [PROFILE_UART_APP_ID] = {
-        .gatts_cb = gatts_uart_event_handler,
-        .gatts_if = ESP_GATT_IF_NONE, }
-    };
-
-typedef struct
-{
-    uint8_t *prepare_buf;
-    int prepare_len;
-} prepare_type_env_t;
-
-static prepare_type_env_t a_prepare_write_env;
-
-void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
-void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
-
 char * parse_JSON(uint8_t *data, int len , const char *property){
 
      
@@ -491,9 +474,8 @@ char * parse_JSON(uint8_t *data, int len , const char *property){
     }
 }
 
-uint8_t parse_command(uint8_t *data, int len , const char *property){
-
-     
+uint8_t parse_command(uint8_t *data, int len , const char *property)
+{
     char json_str[len + 1]; // Create a buffer with space for null terminator
     memcpy(json_str, data, len);
     json_str[len] = '\0'; // Ensure null termination
@@ -502,14 +484,6 @@ uint8_t parse_command(uint8_t *data, int len , const char *property){
 
     // Extract command
     blecmd = (BLECommands)(uint8_t)json_str[0];
-    // if((blecmd >= MAX_BLE_CMDS) || (blecmd < 1)){
-    //     ESP_LOGE(GATTS_TAG, "Invalid command received: %X", blecmd);
-    //     return 0;
-    // }
-    // else
-    // {
-        ESP_LOGI(GATTS_TAG, "Command received: %s", cmdStringFetch[blecmd-1]);
-    // }
 
     // Extract property value
     switch (blecmd)
@@ -519,6 +493,8 @@ uint8_t parse_command(uint8_t *data, int len , const char *property){
     case READ_INTERNAL_TEMP:
     case READ_TEMP:
     case READ_RELAY_STATE:
+        // No parameters needed for these commands and if any, command is discarded.
+        blecmd = (len > 1) ? NO_COMMAND : blecmd;
         break;
 
     case WIFI_UPDATE:
@@ -579,14 +555,11 @@ uint8_t parse_command(uint8_t *data, int len , const char *property){
         break;
     }
 
+    ESP_LOGD(GATTS_TAG, "Command received: %s",
+            ((blecmd >= NO_COMMAND) && (blecmd < MAX_BLE_CMDS)) ? cmdStringFetch[blecmd] : cmdStringFetch[0]);
 
     return blecmd;
 }
-
-
-
-
-
 
 void parse_ble_write_data(uint8_t *data, int len)
 {
@@ -1079,9 +1052,9 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
                 // ESP_LOGI(GATTS_TAG, "cmd : %s", property , property_JSON->valuestring);
     
     
-                esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
-                                            gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
-                                            param->write.len, param->write.value, false);
+                // esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
+                //                             gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
+                //                             param->write.len, param->write.value, false);
             }
 
         }
@@ -1106,16 +1079,15 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
         conn_params.max_int = 0x20; // max_int = 0x20*1.25ms = 40ms
         conn_params.min_int = 0x10; // min_int = 0x10*1.25ms = 20ms
         conn_params.timeout = 400;  // timeout = 400*10ms = 4000ms
-        // ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
-                //  param->connect.conn_id,
-                //  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
-                //  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
+        ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
+                 param->connect.conn_id,
+                 param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
+                 param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
         gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
         // start sent the update connection parameters to the peer device.
         esp_ble_gap_update_conn_params(&conn_params);
+        gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
         break;
-        // gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
-        // break;
 
     case ESP_GATTS_DISCONNECT_EVT:
         ESP_LOGI(GATTS_TAG, "DEVICE DISCONNECTED");
@@ -1222,7 +1194,7 @@ static void start_ble_provisioning(void)
     }
 }
 
-void reset_device_and_erase_nvs()
+esp_err_t reset_device_and_erase_nvs()
 {
     esp_err_t err;
 
@@ -1230,13 +1202,11 @@ void reset_device_and_erase_nvs()
     err = nvs_flash_erase();
     if (err != ESP_OK) {
         ESP_LOGE("RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
-        return;
+        return err;
     }
 
     ESP_LOGI("RESET", "NVS erased, restarting device...");
-
-    // Restart the device
-    esp_restart();
+    return err;
 }
 
 void execute_command(void)
@@ -1245,25 +1215,32 @@ void execute_command(void)
     {
     case WIFI_UPDATE:
         ESP_LOGI(GATTS_TAG, "Updating WiFi credentials...");
-        save_wifi_credentials(bleParameters[0], bleParameters[1]);
-        // esp_restart();
-        // break;
+        send_ble_uart_notification(save_wifi_credentials(bleParameters[0], bleParameters[1]), NULL, 0);
+        ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        esp_restart();
+        break;
     case REBOOT:
         ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        send_ble_uart_notification(ESP_OK, NULL, 0);
         esp_restart();
         break;
     case FACTORY_RESET:
         ESP_LOGW(GATTS_TAG, "Performing application reset...");
-        reset_device_and_erase_nvs();
+        send_ble_uart_notification(reset_device_and_erase_nvs(), NULL, 0);
+        esp_restart();
         break;
     case READ_INTERNAL_TEMP:
         ESP_LOGI(GATTS_TAG, "Reading internal temperature...");
+        // send_ble_uart_notification(ESP_FAIL, NULL, 0);
         break;
     case READ_TEMP:
         ESP_LOGI(GATTS_TAG, "Reading external temperature...");
+        // uint8_t respData[] = {0x01, 0x02, 0x03, 0x04};
+        // send_ble_uart_notification(ESP_OK, respData, sizeof(respData));
         break;
     case READ_RELAY_STATE:
         ESP_LOGI(GATTS_TAG, "Reading relay state...");
+        // send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     case SET_TARGET_TEMP:
         ESP_LOGI(GATTS_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
@@ -1278,6 +1255,9 @@ void execute_command(void)
     }
     free(bleParameters[0]);
     free(bleParameters[1]);
+    bleParameters[0] = NULL;
+    bleParameters[1] = NULL;
+    blecmd = NO_COMMAND;
     uart_cmd_handler_flag = false;
 }
 
