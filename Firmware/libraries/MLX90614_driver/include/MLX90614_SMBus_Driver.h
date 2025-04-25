@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 
-void MLX90614_SMBusInit(uint8_t sda_gpio, uint8_t scl_gpio, int freq);
+void MLX90614_SMBusInit(uint8_t sda_gpio, uint8_t scl_gpio, int freq, uint8_t interface_num);
 int MLX90614_SMBusRead(uint8_t slaveAddr,uint8_t readAddress, uint16_t *data);
 int MLX90614_SMBusWrite(uint8_t slaveAddr,uint8_t writeAddress, uint16_t data);
 int MLX90614_SendCommand(uint8_t slaveAddr,uint8_t command);

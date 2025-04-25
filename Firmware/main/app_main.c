@@ -48,7 +48,7 @@ void example_write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare
 void example_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 
 
-BLECommands blecmd;
+BLE_COMMANDS blecmd;
 char* bleParameters[2] = {NULL, NULL};
 
 char *cmdStringFetch[]  = {
@@ -254,7 +254,7 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
                                                 sizeof(resp), resp, false);
     if (err != ESP_OK)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to send BLE notification, error code = %x", esp_err_to_name(err));
+        ESP_LOGE(GATTS_TAG, "Failed to send BLE notification, error code = %s", esp_err_to_name(err));
     }
 }
 
@@ -483,7 +483,7 @@ uint8_t parse_command(uint8_t *data, int len , const char *property)
     ESP_LOGI(GATTS_TAG, "%s", json_str);
 
     // Extract command
-    blecmd = (BLECommands)(uint8_t)json_str[0];
+    blecmd = (BLE_COMMANDS)(uint8_t)json_str[0];
 
     // Extract property value
     switch (blecmd)

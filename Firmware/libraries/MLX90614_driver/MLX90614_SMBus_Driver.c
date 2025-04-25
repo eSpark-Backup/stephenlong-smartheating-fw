@@ -1,8 +1,9 @@
 #include "driver/i2c.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 #include "include/MLX90614_SMBus_Driver.h"
 
-#define SENSOR_I2C_NUM  IR_SENSOR_I2C_INTERFACE
+// #define interface  MLX90614_I2C_NUM
 #define I2C_MASTER_TX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define WRITE_BIT I2C_MASTER_WRITE  /*!< I2C master write */
@@ -14,13 +15,15 @@
 
 uint8_t sda;
 uint8_t scl;
+uint8_t interface;
 static const char *TAG = "MLX90614_Module";
 uint8_t Calculate_PEC(uint8_t, uint8_t);
 void WaitEE(uint16_t ms);
 
-void MLX90614_SMBusInit(uint8_t sda_gpio, uint8_t scl_gpio, int freq){   
+void MLX90614_SMBusInit(uint8_t sda_gpio, uint8_t scl_gpio, int freq, uint8_t interface_num){   
     sda = sda_gpio;
     scl = scl_gpio;
+    interface = interface_num;
     i2c_config_t MLX90614_config = {
         .mode = I2C_MODE_MASTER,       /*!< I2C mode */
         .sda_io_num = sda_gpio,        /*!< GPIO number for I2C sda signal */
@@ -29,8 +32,8 @@ void MLX90614_SMBusInit(uint8_t sda_gpio, uint8_t scl_gpio, int freq){
         .scl_pullup_en = GPIO_PULLUP_ENABLE,  /*!< Internal GPIO pull mode for I2C scl signal*/
         .master.clk_speed = freq    /*!< I2C clock frequency for master mode, (no higher than 1MHz for now) */
     };
-    i2c_param_config(SENSOR_I2C_NUM, &MLX90614_config);
-    i2c_driver_install(SENSOR_I2C_NUM, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    i2c_param_config(interface, &MLX90614_config);
+    i2c_driver_install(interface, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
 }
 
 int MLX90614_SMBusRead(uint8_t slaveAddr, uint8_t reg_addr, uint16_t *data){
@@ -56,7 +59,7 @@ int MLX90614_SMBusRead(uint8_t slaveAddr, uint8_t reg_addr, uint16_t *data){
     i2c_master_read(cmd, recived_data, 2, ACK_VAL);
     i2c_master_read_byte(cmd, recived_data + 2, NACK_VAL);       
     i2c_master_stop(cmd);  
-    esp_err_t ret = i2c_master_cmd_begin(SENSOR_I2C_NUM, cmd, 1000 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         pec = Calculate_PEC(0, pec);
@@ -104,7 +107,7 @@ int MLX90614_SMBusWrite(uint8_t slaveAddr, uint8_t writeAddress, uint16_t data)
         i2c_master_write_byte(cmd, send_data[i], ACK_CHECK_EN);
     }
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(SENSOR_I2C_NUM, cmd, 1000 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Write OK");
@@ -151,7 +154,7 @@ int MLX90614_SendCommand(uint8_t slaveAddr, uint8_t command)
         i2c_master_write_byte(cmd, send_data[i], ACK_CHECK_EN);
     }
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(SENSOR_I2C_NUM, cmd, 1000 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Write OK");
