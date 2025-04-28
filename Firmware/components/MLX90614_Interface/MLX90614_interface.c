@@ -25,10 +25,10 @@ void ir_sensor_task(void * pvParameters)
         uint16_t ir1 = 0;
         uint16_t ir2 = 0;
         
-        MLX90614_GetTa(MLX90614_I2C_ADDR, &Ta);
-        MLX90614_GetTo(MLX90614_I2C_ADDR, &To);
-        MLX90614_GetIRdata1(MLX90614_I2C_ADDR, &ir1);
-        MLX90614_GetIRdata2(MLX90614_I2C_ADDR, &ir2);
+        MLX90614_GetTa(MLX90614_I2C_ADDR1, &Ta);
+        MLX90614_GetTo(MLX90614_I2C_ADDR1, &To);
+        MLX90614_GetIRdata1(MLX90614_I2C_ADDR1, &ir1);
+        MLX90614_GetIRdata2(MLX90614_I2C_ADDR1, &ir2);
         
         ESP_LOGD(TAG, "Ta: %.2f, To: %.2f, IR1: %d, IR2: %d", Ta, To, ir1, ir2);
 
@@ -69,6 +69,28 @@ float get_operative_temp(void)
     ESP_LOGD(TAG, "Toperative: %.2f", Toperative);
 
     return Toperative;
+}
+
+float get_ambient_temp(void)
+{
+    float Ta = 0;
+
+    CircularBuffer_Retrieve(&dataBufferTa, &Ta);
+
+    ESP_LOGD(TAG, "Ta: %.2f", Ta);
+
+    return Ta;
+}
+
+float get_object_temp(void)
+{
+    float To = 0;
+
+    CircularBuffer_Retrieve(&dataBufferTa, &To);
+
+    ESP_LOGD(TAG, "Ta: %.2f", To);
+
+    return To;
 }
 
 // Initialize the buffer

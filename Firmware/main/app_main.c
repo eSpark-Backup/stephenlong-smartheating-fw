@@ -35,6 +35,8 @@
 #include "esp_gatt_common_api.h"
 
 #include "defines.h"
+#include "MLX90614_interface.h"
+#include "Heater_interface.h"
 
 
 static const char *TAG = "gpio_isr";
@@ -1231,22 +1233,29 @@ void execute_command(void)
         break;
     case READ_INTERNAL_TEMP:
         ESP_LOGI(GATTS_TAG, "Reading internal temperature...");
-        // send_ble_uart_notification(ESP_FAIL, NULL, 0);
+        float tempInternal = get_ambient_temp();
+        send_ble_uart_notification(ESP_FAIL, (uint8_t*)&tempInternal, sizeof(tempInternal));
         break;
     case READ_TEMP:
         ESP_LOGI(GATTS_TAG, "Reading external temperature...");
-        // uint8_t respData[] = {0x01, 0x02, 0x03, 0x04};
-        // send_ble_uart_notification(ESP_OK, respData, sizeof(respData));
+        float tempObject = get_object_temp();
+        send_ble_uart_notification(ESP_OK, (uint8_t*)&tempObject, sizeof(tempObject));
         break;
     case READ_RELAY_STATE:
         ESP_LOGI(GATTS_TAG, "Reading relay state...");
-        // send_ble_uart_notification(ESP_OK, NULL, 0);
+        HEATER_STATE relayState = get_heater_state();
+        send_ble_uart_notification(ESP_OK, (uint8_t*)&relayState, sizeof(relayState));
         break;
     case SET_TARGET_TEMP:
         ESP_LOGI(GATTS_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
+        float targetTemp = (float)(*(uint8_t*)bleParameters[0]) + ((float)(*(uint8_t*)bleParameters[1]) / 100.0f);
+        set_heater_target_temp(targetTemp);
+        send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     case SET_RELAYS:
         ESP_LOGI(GATTS_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
+        set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
+        send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     
     default:
@@ -1264,7 +1273,7 @@ void execute_command(void)
 void app_main(void)
 {
     gpio_config_t io_conf = {
-        .pin_bit_mask = GPIO_INPUT_PIN_SEL,
+        .pin_bit_mask = GPIO_INPUT_PIN_SEL(GPIO_INPUT_IO),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,     // Or PULLDOWN based on your wiring
         .intr_type = GPIO_INTR_ANYEDGE        // You can use RISING/FALLING if needed
@@ -1303,7 +1312,8 @@ void app_main(void)
         start_ble_provisioning();
     }
 
-    while(1){
+    while(1)
+    {
         if(gpio_isr_handler_flag == true){
             start_softap_provisioning();
         }
@@ -1314,5 +1324,4 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(500));  // Delay for 1 second
 
     }
-
 }

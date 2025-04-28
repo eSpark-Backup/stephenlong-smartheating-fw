@@ -5,7 +5,7 @@
 #define COMPANY_ID                 0x0EC3
 
 #define IR_SENSOR_I2C_INTERFACE    I2C_NUM_0
-#define IR_SENSOR_I2C_ADDR         0x5A
+#define IR_SENSOR_I2C_ADDR1        0x5A
 #define IR_SENSOR_SDA_IO           21
 #define IR_SENSOR_SCL_IO           22
 
@@ -33,7 +33,8 @@
 #define PROFILE_UART_APP_ID 1
 
 #define GPIO_INPUT_IO     4               // <-- Your GPIO pin
-#define GPIO_INPUT_PIN_SEL  (1ULL<<GPIO_INPUT_IO)
+#define GPIO_INPUT_PIN_SEL(x)  (1ULL<<x)
+#define GPIO_OUTPUT_PIN_SEL(x) (1ULL<<x)
 
 #define GATTS_SERVICE_UUID_TEST_A   COMPANY_ID // Wifi Prov
 #define GATTS_CHAR_UUID_TEST_A      0xFF01
@@ -48,6 +49,14 @@ typedef enum {
     ERROR,
     FIRMWARE_UPDATE,
 }DEVICE_STATUS;
+
+typedef enum
+{
+    HEATER_OFF = 0,
+    HEATER_LOW,
+    HEATER_MID,
+    HEATER_HIGH,
+}HEATER_STATE;
 
 typedef enum {
     NO_COMMAND = 0,
