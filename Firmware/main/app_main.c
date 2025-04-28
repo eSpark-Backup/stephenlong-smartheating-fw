@@ -37,6 +37,7 @@
 #include "defines.h"
 #include "MLX90614_interface.h"
 #include "Heater_interface.h"
+#include "Status_led.h"
 
 
 static const char *TAG = "gpio_isr";
@@ -1311,6 +1312,8 @@ void app_main(void)
         ESP_LOGI(WIFI_TAG, "Starting BLE for provisioning");
         start_ble_provisioning();
     }
+    status_led_init();
+    set_led_status(NORMAL_OP);
 
     while(1)
     {
