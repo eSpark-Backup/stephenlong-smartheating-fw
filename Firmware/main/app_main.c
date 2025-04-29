@@ -67,13 +67,13 @@ char *cmdStringFetch[]  = {
 };
 
 
-const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+const uint8_t uart_tx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E,
                                   0x93, 0xF3, 0xA3, 0xB5, 0x03, 0x00, 0x40, 0x7E};
 
-const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+const uint8_t uart_rx_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E,
                                   0x93, 0xF3, 0xA3, 0xB5, 0x02, 0x00, 0x40, 0x7E};
 
-const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xA9, 0xE0,
+const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E,
                                        0x93, 0xF3, 0xA3, 0xB5, 0x01, 0x00, 0x40, 0x7E};
 
 
@@ -82,7 +82,7 @@ static esp_gatt_char_prop_t a_property = 0;
 
 static esp_attr_value_t gatts_demo_char1_val =
     {
-        .attr_max_len = GATTS_DEMO_CHAR_VAL_LEN_MAX,
+        .attr_max_len = GATTS_CHAR_VAL_LEN_MAX,
         .attr_len = sizeof(char1_str),
         .attr_value = char1_str,
 };
@@ -102,7 +102,7 @@ static uint8_t raw_scan_rsp_data[] = { // Length 15, Data Type 9 (Complete Local
     0x45, 0x4d, 0x4f};
 #else
 
-static uint8_t adv_service_uuid128[32] = {
+static uint8_t adv_service_uuid128[16] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
     // first uuid, 16bit, [12],[13] is the value
     0xfb,
@@ -117,27 +117,27 @@ static uint8_t adv_service_uuid128[32] = {
     0x10,
     0x00,
     0x00,
-    0xEE,
+    0xC3,
+    0x0E,
     0x00,
     0x00,
-    0x00,
-    // second uuid, 32bit, [12], [13], [14], [15] is the value
-    0xfb,
-    0x34,
-    0x9b,
-    0x5f,
-    0x80,
-    0x00,
-    0x00,
-    0x80,
-    0x00,
-    0x10,
-    0x00,
-    0x00,
-    0xFF,
-    0x00,
-    0x00,
-    0x00,
+    // // second uuid, 32bit, [12], [13], [14], [15] is the value
+    // 0xfb,
+    // 0x34,
+    // 0x9b,
+    // 0x5f,
+    // 0x80,
+    // 0x00,
+    // 0x00,
+    // 0x80,
+    // 0x00,
+    // 0x10,
+    // 0x00,
+    // 0x00,
+    // 0xFF,
+    // 0x00,
+    // 0x00,
+    // 0x00,
 };
 
 // The length of adv data must be less than 31 bytes
@@ -307,7 +307,7 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
-        if (s_retry_num > EXAMPLE_AP_RECONN_ATTEMPTS)
+        if (s_retry_num > AP_RECONN_ATTEMPTS)
         {
             ESP_LOGI(WIFI_TAG, "Starting SoftAP for provisioning");
             start_softap_provisioning();
@@ -786,7 +786,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         gl_profile_tab[PROFILE_A_APP_ID].service_id.is_primary = true;
         gl_profile_tab[PROFILE_A_APP_ID].service_id.id.inst_id = 0x00;
         gl_profile_tab[PROFILE_A_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_16;
-        gl_profile_tab[PROFILE_A_APP_ID].service_id.id.uuid.uuid.uuid16 = GATTS_SERVICE_UUID_TEST_A;
+        gl_profile_tab[PROFILE_A_APP_ID].service_id.id.uuid.uuid.uuid16 = GATTS_SERVICE_UUID;
 
         esp_err_t set_dev_name_ret = esp_ble_gap_set_device_name(SSID_WIFI);
         if (set_dev_name_ret)
@@ -823,7 +823,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         adv_config_done |= scan_rsp_config_flag;
 
 #endif
-        esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_A_APP_ID].service_id, GATTS_NUM_HANDLE_TEST_A);
+        esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_A_APP_ID].service_id, GATTS_NUM_HANDLE_A);
         break;
 
     case ESP_GATTS_WRITE_EVT:
@@ -889,7 +889,7 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
         // ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d,  service_handle %d\n", param->create.status, param->create.service_handle);
         gl_profile_tab[PROFILE_A_APP_ID].service_handle = param->create.service_handle;
         gl_profile_tab[PROFILE_A_APP_ID].char_uuid.len = ESP_UUID_LEN_16;
-        gl_profile_tab[PROFILE_A_APP_ID].char_uuid.uuid.uuid16 = GATTS_CHAR_UUID_TEST_A;
+        gl_profile_tab[PROFILE_A_APP_ID].char_uuid.uuid.uuid16 = GATTS_CHAR_UUID;
 
         esp_ble_gatts_start_service(gl_profile_tab[PROFILE_A_APP_ID].service_handle);
         a_property = ESP_GATT_CHAR_PROP_BIT_WRITE;
@@ -953,7 +953,7 @@ static void gatts_uart_event_handler(esp_gatts_cb_event_t event,
                uart_service_uuid, ESP_UUID_LEN_128);
 
         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_UART_APP_ID].service_id,
-                                     GATTS_NUM_HANDLE_TEST_B);
+                                     GATTS_NUM_HANDLE_B);
         break;
 
     case ESP_GATTS_CREATE_EVT:
@@ -1274,7 +1274,7 @@ void execute_command(void)
 void app_main(void)
 {
     gpio_config_t io_conf = {
-        .pin_bit_mask = GPIO_INPUT_PIN_SEL(GPIO_INPUT_IO),
+        .pin_bit_mask = GPIO_PIN_MASK(GPIO_INPUT_IO),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,     // Or PULLDOWN based on your wiring
         .intr_type = GPIO_INTR_ANYEDGE        // You can use RISING/FALLING if needed

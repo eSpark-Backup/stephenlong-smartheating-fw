@@ -23,7 +23,7 @@ void heater_interaface_task(void * pvParameters)
 void heater_interaface_init(void)
 {
     gpio_config_t io_conf = {
-        .pin_bit_mask = GPIO_OUTPUT_PIN_SEL(HEATER_HIGH_IO) | GPIO_OUTPUT_PIN_SEL(HEATER_LOW_IO),
+        .pin_bit_mask = GPIO_PIN_MASK(HEATER_HIGH_IO) | GPIO_PIN_MASK(HEATER_LOW_IO),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
