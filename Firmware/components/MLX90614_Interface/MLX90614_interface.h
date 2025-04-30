@@ -2,6 +2,7 @@
 
 #include "../../main/defines.h"
 #include <stdbool.h>
+#include "esp_err.h"
 
 #define MLX90614_I2C_NUM    IR_SENSOR_I2C_INTERFACE
 #define MLX90614_I2C_ADDR1  IR_SENSOR_I2C_ADDR1
@@ -21,7 +22,7 @@ typedef struct {
 
 void ir_sensor_task(void * pvParameters);
 
-void ir_sensor_init(void);
+esp_err_t ir_sensor_init(void);
 float get_operative_temp(void);
 float get_ambient_temp(void);
 float get_object_temp(void);

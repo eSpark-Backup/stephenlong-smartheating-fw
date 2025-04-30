@@ -39,11 +39,18 @@
 #include "Heater_interface.h"
 #include "Status_led.h"
 
+device_data_t device_data = {0};
+DEVICE_STATUS device_status = OFF_STATE;
 
 static const char *TAG = "gpio_isr";
 bool gpio_isr_handler_flag = false;
 bool uart_cmd_handler_flag = false;
+static prepare_type_env_t a_prepare_write_env;
 
+
+esp_err_t device_data_init(void);
+esp_err_t device_data_set(void);
+void start_softap_provisioning(void);
 /// Declare the static function
 static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
 static void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
@@ -220,16 +227,38 @@ static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
         .gatts_if = ESP_GATT_IF_NONE, }
 };
 
+// // ISR handler
+// static void IRAM_ATTR gpio_isr_handler(void* arg) {
+//     gpio_isr_handler_flag=true;
 
-static prepare_type_env_t a_prepare_write_env;
+// }
 
-void start_softap_provisioning(void);
+static int64_t press_start_time = 0;
+static void IRAM_ATTR button_isr_handler(void *arg) {
+    static int64_t last_isr_time = 0;
+    int64_t now = esp_timer_get_time(); // microseconds
 
-// ISR handler
-static void IRAM_ATTR gpio_isr_handler(void* arg) {
-    gpio_isr_handler_flag=true;
+    // Debounce
+    if (now - last_isr_time < BUTTON_DEBOUNCE_MS * 1000) return;
+    last_isr_time = now;
 
+    if (gpio_get_level(BUTTON_GPIO) == 0) {
+        // Button pressed (falling edge)
+        press_start_time = now;
+    } else {
+        // Button released (rising edge)
+        int64_t press_duration = now - press_start_time;
+
+        if (press_duration >= BUTTON_FACTORY_RESET * 1000000) {
+            ESP_LOGI(TAG, "Press duration = %lld ms\nPerforming factory reset", press_duration / 1000);
+        } else if (press_duration >= BUTTON_PAIRMODE_THRESHOLD * 1000000) {
+            ESP_LOGI(TAG, "Press duration = %lld ms\nStarting pairmode", press_duration / 1000);
+        } else {
+            ESP_LOGI(TAG, "Press duration = %lld ms\nPowering off", press_duration / 1000);
+        }
+    }
 }
+
 
 void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
 {
@@ -264,7 +293,7 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
 static esp_err_t save_wifi_credentials(const char *ssid, const char *password)
 {
     nvs_handle_t nvs;
-    esp_err_t err = nvs_open("wifi_storage", NVS_READWRITE, &nvs);
+    esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READWRITE, &nvs);
     if (err != ESP_OK)
     {
         ESP_LOGE(WIFI_TAG, "Error opening NVS: %s", esp_err_to_name(err));
@@ -282,7 +311,7 @@ static esp_err_t save_wifi_credentials(const char *ssid, const char *password)
 static esp_err_t load_wifi_credentials(char *ssid, char *password)
 {
     nvs_handle_t nvs;
-    esp_err_t err = nvs_open("wifi_storage", NVS_READONLY, &nvs);
+    esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READONLY, &nvs);
     if (err != ESP_OK)
     {
         ESP_LOGE(WIFI_TAG, "No saved credentials found");
@@ -315,12 +344,10 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         else{
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOGI(WIFI_TAG, "retry to connect to the AP");
             ESP_LOGI(WIFI_TAG, "connect to the AP fail");
+            ESP_LOGI(WIFI_TAG, "retry to connect to the AP");
 
         }
-
-  
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
@@ -1271,26 +1298,93 @@ void execute_command(void)
     uart_cmd_handler_flag = false;
 }
 
-void app_main(void)
+void button_init(void)
 {
-    gpio_config_t io_conf = {
-        .pin_bit_mask = GPIO_PIN_MASK(GPIO_INPUT_IO),
+    gpio_config_t btn_cfg = {
+        .pin_bit_mask = GPIO_PIN_MASK(BUTTON_GPIO),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,     // Or PULLDOWN based on your wiring
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_ANYEDGE        // You can use RISING/FALLING if needed
     };
-    gpio_config(&io_conf);
-        // Install GPIO ISR service
+    gpio_config(&btn_cfg);
+    // Install GPIO ISR service
     gpio_install_isr_service(0);  // Use ESP_INTR_FLAG_DEFAULT or 0
-    gpio_isr_handler_add(GPIO_INPUT_IO, gpio_isr_handler, (void*)(uintptr_t)GPIO_INPUT_IO);
+    gpio_isr_handler_add(BUTTON_GPIO, button_isr_handler, (void*)(uintptr_t)BUTTON_GPIO);
     
-    ESP_LOGI(TAG, "ISR set up on GPIO %d", GPIO_INPUT_IO);
+    ESP_LOGI(TAG, "ISR set up on GPIO %d", BUTTON_GPIO);
+}
 
+esp_err_t device_data_init(void)
+{
+    ESP_ERROR_CHECK(nvs_flash_init());
+
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(WIFI_TAG, "Device data not present.");
+        return err;
+    }
+    err = nvs_get_i8(nvs, NVS_KEY_MODE, (int8_t*)&device_data.mode);
+    if (err != ESP_OK)
+    {
+        device_data.mode = MANUAL_MODE;
+        ESP_LOGE(WIFI_TAG, "Device mode not set. Setting to MANUAL_MODE.");
+        nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
+        nvs_commit(nvs);
+    }
+    size_t target_temp_len = sizeof(device_data.target_temp);
+    err = nvs_get_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, &target_temp_len);
+    if (err != ESP_OK)
+    {
+        device_data.target_temp = 0;
+        ESP_LOGE(WIFI_TAG, "Target temp not set. Setting to 0.");
+        nvs_set_i8(nvs, NVS_KEY_TARGET_TEMP, device_data.target_temp);
+        nvs_commit(nvs);
+    }
+    
+    // size_t ssid_len = WIFI_SSID_MAX_LEN, pass_len = WIFI_PASS_MAX_LEN;
+    // err = nvs_get_str(nvs, NVS_KEY_SSID, device_data.ssid, &ssid_len);
+    // err |= nvs_get_str(nvs, NVS_KEY_PASSWORD, device_data.password, &pass_len);
+    nvs_close(nvs);
+
+    return err;
+}
+
+esp_err_t device_data_set(void)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(WIFI_TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
+    err |= nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
+    err |= nvs_set_str(nvs, NVS_KEY_SSID, device_data.ssid);
+    err |= nvs_set_str(nvs, NVS_KEY_PASSWORD, device_data.password);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+
+    return err;
+}
+
+void app_main(void)
+{
+    device_data_init();
+
+    button_init();
+    if(ir_sensor_init() != ESP_OK)
+    {
+        device_status = ERROR;
+    }
+    heater_interaface_init();
 
     /* Initialize networking stack */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    ESP_ERROR_CHECK(nvs_flash_init());
 
     /* Initialize Wi-Fi including netif with default config */
     esp_netif_create_default_wifi_sta();
@@ -1299,7 +1393,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     char ssid[WIFI_SSID_MAX_LEN] = {0}, password[WIFI_PASS_MAX_LEN] = {0};
-    if (load_wifi_credentials(ssid, password) == ESP_OK)
+    if (load_wifi_credentials(device_data.ssid, device_data.password) == ESP_OK)
     {
         ESP_LOGI(WIFI_TAG, "Connecting to saved WiFi: %s\tPassword: %s", ssid, password);
         wifi_init_sta(ssid, password);
@@ -1311,20 +1405,20 @@ void app_main(void)
         start_softap_provisioning();
         ESP_LOGI(WIFI_TAG, "Starting BLE for provisioning");
         start_ble_provisioning();
+        device_status = PAIRING;
     }
     status_led_init();
-    set_led_status(NORMAL_OP);
+    set_led_status(device_status);
 
     while(1)
     {
-        if(gpio_isr_handler_flag == true){
-            start_softap_provisioning();
-        }
+        // if(gpio_isr_handler_flag == true){
+        //     start_softap_provisioning();
+        // }
         if(uart_cmd_handler_flag)
         {
             execute_command();
         }
         vTaskDelay(pdMS_TO_TICKS(500));  // Delay for 1 second
-
     }
 }

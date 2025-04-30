@@ -1,4 +1,5 @@
 #include "Heater_interface.h"
+#include "MLX90614_interface.h"
 #include "freertos/freertos.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -7,17 +8,24 @@
 
 #define TAG "HEATER_INTERFACE"
 
+TaskHandle_t xHeaterTaskHandle = NULL;
 float tempSetPoint = 0.0;
 
 void heater_interaface_task(void * pvParameters)
 {
     while(1)
     {
-        
+        float Toperative = get_operative_temp();
+        HEATER_STATE state = control_heater(get_heater_target_temp(), Toperative);
+        if(state != get_heater_state())
+        {
+            set_heater_state(state);
+            ESP_LOGD(TAG, "Heater state changed");
+        }
         vTaskDelay(pdMS_TO_TICKS(1000)); // Delay for 1 second
     }
 
-    vTaskDelete(NULL);
+    vTaskDelete(xHeaterTaskHandle);
 }
 
 void heater_interaface_init(void)
@@ -30,13 +38,34 @@ void heater_interaface_init(void)
     };
     gpio_config(&io_conf);
     set_heater_state(HEATER_OFF); // Initialize heater state to OFF
+}
 
-    // Create the task for the heater interface
-    if(xTaskCreate(heater_interaface_task, "Heater_Interface_Task", 2048, NULL, 5, NULL) != pdPASS)
+void set_heater_mode(DEVICE_MODE mode)
+{
+    switch(mode)
     {
-        ESP_LOGE(TAG, "Failed to create heater interface task");
+        case MANUAL_MODE:
+            if(xHeaterTaskHandle != NULL)
+            {
+                vTaskDelete(xHeaterTaskHandle);
+                xHeaterTaskHandle = NULL;
+                ESP_LOGD(TAG, "Heater mode switched to MANUAL_MODE");
+            }
+            break;
+        case AUTO_MODE:
+            // Create the task for the heater interface
+            if(xTaskCreate(heater_interaface_task, "Heater_Interface_Task", 1024, NULL, 5, &xHeaterTaskHandle) != pdPASS)
+            {
+                ESP_LOGE(TAG, "Failed to create heater interface task");
+                break;
+            }
+            ESP_LOGD(TAG, "Heater interface task created successfully");
+            ESP_LOGD(TAG, "Heater mode switched to AUTO_MODE");
+            break;
+        default:
+            ESP_LOGE(TAG, "Mode not supported");
+            break;
     }
-    ESP_LOGD(TAG, "Heater interface task created successfully");
 }
 
 void set_heater_state(HEATER_STATE state)

@@ -16,7 +16,10 @@
 
 #define STATUS_LED_IO               8
 
-#define GPIO_INPUT_IO               4               // <-- Your GPIO pin
+#define BUTTON_PAIRMODE_THRESHOLD   5
+#define BUTTON_FACTORY_RESET        30            // seconds
+#define BUTTON_DEBOUNCE_MS          50
+#define BUTTON_GPIO                 4               // <-- Your GPIO pin
 // #define GPIO_INPUT_PIN_SEL(x)        (1ULL<<x)
 // #define GPIO_OUTPUT_PIN_SEL(x)       (1ULL<<x)
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
@@ -45,6 +48,13 @@
 #define GATTS_CHAR_VAL_LEN_MAX      0x40
 #define PREPARE_BUF_MAX_SIZE        1024
 
+#define NVS_NAMESPACE_DEVICEDATA   "device_data"
+#define NVS_NAMESPACE_WIFIDATA     "wifi_storage"
+#define NVS_KEY_SSID               "ssid"
+#define NVS_KEY_PASSWORD           "password"
+#define NVS_KEY_MODE               "mode"
+#define NVS_KEY_TARGET_TEMP        "target_temp"
+
 typedef enum {
     OFF_STATE,
     NORMAL_OP,
@@ -61,6 +71,14 @@ typedef enum
     HEATER_MID,
     HEATER_HIGH,
 }HEATER_STATE;
+
+typedef enum
+{
+    MANUAL_MODE = 1,
+    AUTO_MODE,
+    ECO_MODE,
+    DEVICE_MODE_COUNT
+}DEVICE_MODE;
 
 typedef enum {
     NO_COMMAND = 0,
@@ -80,3 +98,11 @@ typedef struct
     uint8_t *prepare_buf;
     int prepare_len;
 } prepare_type_env_t;
+
+typedef struct
+{
+    DEVICE_MODE mode;
+    float target_temp;
+    char ssid[WIFI_SSID_MAX_LEN];
+    char password[WIFI_PASS_MAX_LEN];
+} device_data_t;

@@ -59,7 +59,7 @@ Hex Code | Command | Type | Input | Response Format
 
 - **Peripheral Role:** Advertises service on startup
 - **MTU Size:** 500 bytes (negotiable)
-- **Preferred Connection Interval:** 7.5–22.5 ms
+- **Preferred Connection Interval:** 7.5–20 ms
 
 ---
 

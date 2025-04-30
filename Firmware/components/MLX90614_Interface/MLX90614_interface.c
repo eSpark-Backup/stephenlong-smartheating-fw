@@ -41,7 +41,7 @@ void ir_sensor_task(void * pvParameters)
     vTaskDelete( NULL );
 }
 
-void ir_sensor_init(void)
+esp_err_t ir_sensor_init(void)
 {
     // Initialize the circular buffers
     CircularBuffer_Init(&dataBufferTa);
@@ -51,8 +51,10 @@ void ir_sensor_init(void)
     if(xTaskCreate(ir_sensor_task, "IR_Sensor_Task", 2048, NULL, 5, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
+        return ESP_FAIL;
     }
     ESP_LOGD(TAG, "IR sensor task created successfully");
+    return ESP_OK;
 }
 
 float get_operative_temp(void)

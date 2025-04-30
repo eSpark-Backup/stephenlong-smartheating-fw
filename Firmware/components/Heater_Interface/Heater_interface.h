@@ -10,7 +10,9 @@
 void heater_interaface_task(void * pvParameters);
 
 void heater_interaface_init(void);
+void set_heater_mode(DEVICE_MODE mode);
 void set_heater_state(HEATER_STATE state);
 HEATER_STATE get_heater_state(void);
 void set_heater_target_temp(float target_temp);
+float get_heater_target_temp(void);
 HEATER_STATE control_heater(float setpoint, float current_temp);
