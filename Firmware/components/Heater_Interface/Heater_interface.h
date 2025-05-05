@@ -1,18 +1,18 @@
 #pragma once
 
-#include "../../main/defines.h"
+#include "defines.h"
+#include "esp_err.h"
 
 // Thresholds (example values, adjust as needed)
 #define THRESHOLD_HIGH    1.5f
 #define THRESHOLD_MID     0.5f
 #define THRESHOLD_LOW    -0.5f
 
-void heater_interaface_task(void * pvParameters);
+// void heater_interaface_task(void * pvParameters);
 
-void heater_interaface_init(void);
+void heater_interface_init(void);
 void set_heater_mode(DEVICE_MODE mode);
-void set_heater_state(HEATER_STATE state);
+esp_err_t set_heater_state(HEATER_STATE state);
 HEATER_STATE get_heater_state(void);
-void set_heater_target_temp(float target_temp);
-float get_heater_target_temp(void);
 HEATER_STATE control_heater(float setpoint, float current_temp);
+void operate_heater(void);

@@ -16,6 +16,7 @@
  */
 #include "include/MLX90614_SMBus_Driver.h"
 #include "esp_system.h"
+#include "esp_log.h"
 #include <math.h>
 
 //------------------------------------------------------------------------------
@@ -42,7 +43,7 @@ int MLX90614_GetTa(uint8_t slaveAddr, float *ta)
 {
     int error = 0;
     uint16_t data = 0;
-    
+
     error = MLX90614_SMBusRead(slaveAddr, 0x06, &data);
     
     if (data > 0x7FFF)

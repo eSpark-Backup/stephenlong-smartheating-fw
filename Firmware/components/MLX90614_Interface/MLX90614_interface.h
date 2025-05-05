@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../main/defines.h"
+#include "defines.h"
 #include <stdbool.h>
 #include "esp_err.h"
 
@@ -20,7 +20,7 @@ typedef struct {
     int count;   // Number of elements currently in the buffer
 } circular_buffer_t;
 
-void ir_sensor_task(void * pvParameters);
+// void ir_sensor_task(void * pvParameters);
 
 esp_err_t ir_sensor_init(void);
 float get_operative_temp(void);

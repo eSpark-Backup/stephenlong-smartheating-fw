@@ -1,4 +1,5 @@
 #include "MLX90614_interface.h"
+#include "MLX90614_SMBus_Driver.h"
 #include "MLX90614_API.h"
 #include "freertos/freertos.h"
 #include "freertos/task.h"
@@ -13,31 +14,42 @@
             }                                       \
         } while (0)
 
-circular_buffer_t dataBufferTa;            // circular buffer for Tambient data
-circular_buffer_t dataBufferTo;            // circular buffer for Tobject data
+#define CHECK_ERROR(expression)                             \
+        error = expression;                                 \
+        do {                                                \
+            if (error != ESP_OK) {                          \
+                ESP_LOGE(TAG, "Error: %d", error);          \
+                set_device_status(1, ERROR_IR_SENSOR);      \
+                break;                                      \
+            }                                               \
+            else { set_device_status(0, ERROR_IR_SENSOR); } \
+        } while (0);                                        \
+        if(error != ESP_OK) continue;
+
+DEVICE_STATUS* _device_status = NULL; // Pointer to device status
+circular_buffer_t dataBufferTa, dataBufferTo;            // circular buffer for Tambient and Tobject data
 
 void ir_sensor_task(void * pvParameters)
 {
     while(1)
     {
-        float Ta = 0;
-        float To = 0;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        float Ta = -1;
+        float To = -1;
         uint16_t ir1 = 0;
         uint16_t ir2 = 0;
+        int error = ESP_OK;
+
+        CHECK_ERROR(MLX90614_GetTa(MLX90614_I2C_ADDR1, &Ta));
+        CHECK_ERROR(MLX90614_GetTo(MLX90614_I2C_ADDR1, &To));
+        CHECK_ERROR(MLX90614_GetIRdata1(MLX90614_I2C_ADDR1, &ir1));
+        CHECK_ERROR(MLX90614_GetIRdata2(MLX90614_I2C_ADDR1, &ir2));
         
-        MLX90614_GetTa(MLX90614_I2C_ADDR1, &Ta);
-        MLX90614_GetTo(MLX90614_I2C_ADDR1, &To);
-        MLX90614_GetIRdata1(MLX90614_I2C_ADDR1, &ir1);
-        MLX90614_GetIRdata2(MLX90614_I2C_ADDR1, &ir2);
-        
-        ESP_LOGD(TAG, "Ta: %.2f, To: %.2f, IR1: %d, IR2: %d", Ta, To, ir1, ir2);
+        ESP_LOGD(TAG "_Task", "Ta: %.2f, To: %.2f, IR1: %d, IR2: %d", Ta, To, ir1, ir2);
 
         NEGATIVE_FILTER_CHECK(Ta);
-        NEGATIVE_FILTER_CHECK(To);
-        
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        NEGATIVE_FILTER_CHECK(To); 
     }
-
     vTaskDelete( NULL );
 }
 
@@ -47,13 +59,17 @@ esp_err_t ir_sensor_init(void)
     CircularBuffer_Init(&dataBufferTa);
     CircularBuffer_Init(&dataBufferTo);
 
+    MLX90614_SMBusInit(MLX90614_SDA_IO, MLX90614_SCL_IO, MLX90614_FREQ, MLX90614_I2C_NUM);
+
     // Create the task for the IR sensor
-    if(xTaskCreate(ir_sensor_task, "IR_Sensor_Task", 2048, NULL, 5, NULL) != pdPASS)
+    if(xTaskCreate(ir_sensor_task, "IR_Sensor_Task", 2048, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
+        set_device_status(1, ERROR);
         return ESP_FAIL;
     }
     ESP_LOGD(TAG, "IR sensor task created successfully");
+
     return ESP_OK;
 }
 
@@ -65,7 +81,7 @@ float get_operative_temp(void)
 
     CircularBuffer_Retrieve(&dataBufferTa, &Ta);
     CircularBuffer_Retrieve(&dataBufferTo, &To);
-    Toperative = (0.7 * To) + (0.3 * Ta);
+    Toperative = (0.3 * Ta) + (0.7 * To);
 
     ESP_LOGD(TAG, "Ta: %.2f, To: %.2f", Ta, To);
     ESP_LOGD(TAG, "Toperative: %.2f", Toperative);
@@ -118,7 +134,6 @@ bool CircularBuffer_IsEmpty(circular_buffer_t* cb)
 // Add an element to the buffer
 bool CircularBuffer_Push(circular_buffer_t* cb, float data)
 {
-    // if (CircularBuffer_IsFull(cb))
     if (cb == NULL)     // Invalid buffer pointer check
     {
         ESP_LOGE("CircularBuffer", "Push error: buffer pointer is NULL");
@@ -126,7 +141,7 @@ bool CircularBuffer_Push(circular_buffer_t* cb, float data)
     }
     cb->buffer[cb->head] = data;
     cb->head = (cb->head + 1) % BUFFER_SIZE;
-    cb->count++;
+    cb->count = (cb->count < BUFFER_SIZE) ? cb->count + 1 : BUFFER_SIZE; // Increment count, wrap around if full
     return 0;
 }
 
@@ -139,7 +154,7 @@ bool CircularBuffer_Pop(circular_buffer_t* cb, float* data)
     }
     *data = cb->buffer[cb->tail];
     cb->tail = (cb->tail + 1) % BUFFER_SIZE;
-    cb->count--;
+    cb->count = (cb->count > 0) ? cb->count - 1 : 0;
     return 0;
 }
 

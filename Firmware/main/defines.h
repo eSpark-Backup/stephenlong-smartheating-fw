@@ -1,6 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <esp_log.h>
+#include <hal/i2c_types.h>
 
 #define COMPANY_ID                  0x0EC3
 #define COMPANY_NAME                "HERSCHEL"
@@ -31,8 +36,11 @@
 #define WIFI_SSID_MAX_LEN           32
 #define WIFI_PASS_MAX_LEN           64
 
-#define WIFI_TAG                    "SoftAP"
-#define GATTS_TAG                   "BLE"
+#define DEVICE_TAG                  "APP"    
+#define WIFI_TAG                    "_SoftAP"
+#define GATTS_TAG                   "_BLE"
+#define GPIO_TAG                    "GPIO"
+#define ISR_TAG                     "_ISR"
 
 #define BLE_RESPONSE_SUCCESS        0xA1
 #define BLE_RESPONSE_FAIL           0xA2
@@ -56,12 +64,15 @@
 #define NVS_KEY_TARGET_TEMP        "target_temp"
 
 typedef enum {
-    OFF_STATE,
-    NORMAL_OP,
-    PAIRING,
-    ERROR,
-    FIRMWARE_UPDATE,
-    DEVICE_STATUS_COUNT
+    NORMAL_OP = 0x01,
+    PAIRING = 0x02,
+    FIRMWARE_UPDATE = 0x04,
+    ERROR = 0x10,
+    ERROR_IR_SENSOR = 0x20,
+    ERROR_PROVISIONING = 0x40,
+    ERROR_HEATER = 0x80,
+    OFF_STATE = 0xFFFF,
+    // DEVICE_STATUS_COUNT
 }DEVICE_STATUS;
 
 typedef enum
@@ -93,6 +104,13 @@ typedef enum {
     MAX_BLE_CMDS
 }BLE_COMMANDS;
 
+typedef enum {
+    ENUM_DEVICE_STATUS,
+    ENUM_HEATER_STATE,
+    ENUM_DEVICE_MODE,
+    ENUM_BLE_COMMANDS
+} ENUM_TYPE;
+
 typedef struct
 {
     uint8_t *prepare_buf;
@@ -106,3 +124,6 @@ typedef struct
     char ssid[WIFI_SSID_MAX_LEN];
     char password[WIFI_PASS_MAX_LEN];
 } device_data_t;
+
+const char* get_enum_name(ENUM_TYPE type, int value);
+void set_device_status(uint8_t op, int bitMask);

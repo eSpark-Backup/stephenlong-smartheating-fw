@@ -1,3 +1,4 @@
+#include "app.h"
 #include "Heater_interface.h"
 #include "MLX90614_interface.h"
 #include "freertos/freertos.h"
@@ -15,33 +16,41 @@ void heater_interaface_task(void * pvParameters)
 {
     while(1)
     {
-        float Toperative = get_operative_temp();
-        HEATER_STATE state = control_heater(get_heater_target_temp(), Toperative);
-        if(state != get_heater_state())
-        {
-            set_heater_state(state);
-            ESP_LOGD(TAG, "Heater state changed");
-        }
+        operate_heater();
         vTaskDelay(pdMS_TO_TICKS(1000)); // Delay for 1 second
     }
-
     vTaskDelete(xHeaterTaskHandle);
 }
 
-void heater_interaface_init(void)
+void heater_interface_init(void)
 {
     gpio_config_t io_conf = {
         .pin_bit_mask = GPIO_PIN_MASK(HEATER_HIGH_IO) | GPIO_PIN_MASK(HEATER_LOW_IO),
-        .mode = GPIO_MODE_OUTPUT,
+        .mode = GPIO_MODE_INPUT_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&io_conf);
-    set_heater_state(HEATER_OFF); // Initialize heater state to OFF
+
+    // HEATER_STATE status = HEATER_OFF;
+    // while(1)
+    // {
+    //     status++;
+    //     set_heater_state(status%4); // Initialize heater state to OFF
+    //     ESP_LOGD(TAG, "Heater state: %d", status%4);
+    //     vTaskDelay(pdMS_TO_TICKS(500)); // Delay for 1 second
+    // }
+
+    set_heater_mode(get_device_mode());
 }
 
 void set_heater_mode(DEVICE_MODE mode)
 {
+    if(get_device_mode() != mode)
+    {
+        set_device_mode(mode);
+    }
+    
     switch(mode)
     {
         case MANUAL_MODE:
@@ -54,7 +63,7 @@ void set_heater_mode(DEVICE_MODE mode)
             break;
         case AUTO_MODE:
             // Create the task for the heater interface
-            if(xTaskCreate(heater_interaface_task, "Heater_Interface_Task", 1024, NULL, 5, &xHeaterTaskHandle) != pdPASS)
+            if(xTaskCreate(heater_interaface_task, "Heater_Interface_Task", 2048, NULL, 5, &xHeaterTaskHandle) != pdPASS)
             {
                 ESP_LOGE(TAG, "Failed to create heater interface task");
                 break;
@@ -68,7 +77,7 @@ void set_heater_mode(DEVICE_MODE mode)
     }
 }
 
-void set_heater_state(HEATER_STATE state)
+esp_err_t set_heater_state(HEATER_STATE state)
 {
     switch(state)
     {
@@ -94,8 +103,10 @@ void set_heater_state(HEATER_STATE state)
             break;
         default:
             ESP_LOGE(TAG, "Invalid heater state");
+            return ESP_FAIL; // Invalid state
             break;
     }
+    return ESP_OK;
 }
 
 HEATER_STATE get_heater_state(void)
@@ -104,6 +115,7 @@ HEATER_STATE get_heater_state(void)
     int heater_high = gpio_get_level(HEATER_HIGH_IO);
 
     uint8_t heater_bits = (heater_high << 1) | heater_low;
+    ESP_LOGD(TAG, "Heater state bits: %d", heater_bits);
 
     switch (heater_bits)
     {
@@ -113,17 +125,6 @@ HEATER_STATE get_heater_state(void)
         case 0x3: return HEATER_HIGH; // 11
         default:  return HEATER_OFF;  // Should not happen
     }
-}
-
-void set_heater_target_temp(float target_temp)
-{
-    tempSetPoint = target_temp;
-    ESP_LOGD(TAG, "Target temperature set to: %.2f", tempSetPoint);
-}
-
-float get_heater_target_temp(void)
-{
-    return tempSetPoint;
 }
 
 HEATER_STATE control_heater(float setpoint, float current_temp)
@@ -138,5 +139,16 @@ HEATER_STATE control_heater(float setpoint, float current_temp)
         return HEATER_LOW;
     } else { // diff <= -0.5
         return HEATER_OFF;
+    }
+}
+
+void operate_heater(void)
+{
+    float Toperative = get_operative_temp();
+    HEATER_STATE state = control_heater(get_target_temp(), Toperative);
+    if(state != get_heater_state())
+    {
+        set_heater_state(state);
+        ESP_LOGD(TAG, "Heater state changed");
     }
 }

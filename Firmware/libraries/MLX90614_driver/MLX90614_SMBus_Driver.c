@@ -1,5 +1,6 @@
 #include "driver/i2c.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "include/MLX90614_SMBus_Driver.h"
 
@@ -59,7 +60,7 @@ int MLX90614_SMBusRead(uint8_t slaveAddr, uint8_t reg_addr, uint16_t *data){
     i2c_master_read(cmd, recived_data, 2, ACK_VAL);
     i2c_master_read_byte(cmd, recived_data + 2, NACK_VAL);       
     i2c_master_stop(cmd);  
-    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 10 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         pec = Calculate_PEC(0, pec);
@@ -69,8 +70,10 @@ int MLX90614_SMBusRead(uint8_t slaveAddr, uint8_t reg_addr, uint16_t *data){
         pec = Calculate_PEC(pec, recived_data[1]);
     } else if (ret == ESP_ERR_TIMEOUT) {
         ESP_LOGW(TAG, "Bus is busy");
+        return -1;
     } else {
-        ESP_LOGW(TAG, "Read failed");
+        ESP_LOGW(TAG, "%s Read failed", __FUNCTION__);
+        return -1;
     }
     if (pec != recived_data[2])
     {
@@ -107,14 +110,16 @@ int MLX90614_SMBusWrite(uint8_t slaveAddr, uint8_t writeAddress, uint16_t data)
         i2c_master_write_byte(cmd, send_data[i], ACK_CHECK_EN);
     }
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 10 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Write OK");
     } else if (ret == ESP_ERR_TIMEOUT) {
         ESP_LOGW(TAG, "Bus is busy");
+        return -1;
     } else {
         ESP_LOGW(TAG, "Write Failed");
+        return -1;
     }       
     
     MLX90614_SMBusRead(slaveAddr, writeAddress, &dataCheck);
@@ -130,7 +135,7 @@ int MLX90614_SMBusWrite(uint8_t slaveAddr, uint8_t writeAddress, uint16_t data)
 int MLX90614_SendCommand(uint8_t slaveAddr, uint8_t command)
 {
     uint8_t chip_addr;
-    int ack = 0;
+    // int ack = 0;
     uint8_t send_data[2]= {0,0};
     uint8_t pec;
     
@@ -154,7 +159,7 @@ int MLX90614_SendCommand(uint8_t slaveAddr, uint8_t command)
         i2c_master_write_byte(cmd, send_data[i], ACK_CHECK_EN);
     }
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 10 / portTICK_PERIOD_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Write OK");

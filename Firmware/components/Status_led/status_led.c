@@ -6,6 +6,8 @@
 #include "driver/rmt_tx.h"
 #include "led_strip_encoder.h"
 
+#define ERROR_MASK (ERROR | ERROR_IR_SENSOR | ERROR_PROVISIONING)
+
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define RMT_LED_STRIP_GPIO_NUM      STATUS_LED_IO
 
@@ -29,6 +31,8 @@ rmt_encoder_handle_t led_encoder = NULL;
 rmt_transmit_config_t tx_config = {
     .loop_count = 0, // no transfer loop
 };
+
+int status_led_state = 0;
 
 void status_led_task(void * pvParameters)
 {
@@ -77,7 +81,8 @@ void status_led_init(void)
     ESP_ERROR_CHECK(rmt_enable(led_chan));
 
     // Build RGB pixels
-    set_led_status(OFF_STATE);
+    // set_device_status(0, OFF_STATE);
+    set_device_status(1, NORMAL_OP);
 
     // Create the task for the IR sensor
     if(xTaskCreate(status_led_task, "Status_Led_Task", 512, NULL, 5, NULL) != pdPASS)
@@ -87,27 +92,50 @@ void status_led_init(void)
     ESP_LOGD(TAG, "status led task created successfully");
 }
 
-void set_led_status(DEVICE_STATUS status)
+void set_led_status(void)
 {
-    switch (status) {
-        case NORMAL_OP:
-            SET_COLOR(state1, 0, 255, 0); // Green
-            SET_COLOR(state2, 0, 255, 0); // Green
-            break;
-        case PAIRING:
-            SET_COLOR(state1, 0, 0, 255); // Blue
-            SET_COLOR(state2, 0, 0, 0); // off
-            break;
-        case ERROR:
-            SET_COLOR(state1, 255, 0, 0); // Red
-            SET_COLOR(state2, 255, 0, 0); // Red
-            break;
-        case FIRMWARE_UPDATE:
-            SET_COLOR(state1, 255, 255, 0); // Yellow
-            SET_COLOR(state2, 0, 0, 0); // off
-            break;
-        default:
-            SET_COLOR(state1, 0, 0, 0); // off
-            SET_COLOR(state2, 0, 0, 0); // off
+    // int status = status_led_state;
+    if (status_led_state & ERROR_MASK) {
+        // Any error state: show red
+        SET_COLOR(state1, 255, 0, 0); // Red
+        SET_COLOR(state2, 255, 0, 0); // Red
     }
+    else if (status_led_state == FIRMWARE_UPDATE) {
+        SET_COLOR(state1, 255, 255, 0); // Yellow
+        SET_COLOR(state2, 0, 0, 0);     // Off
+    }
+    else if (status_led_state == PAIRING) {
+        SET_COLOR(state1, 0, 0, 255); // Blue
+        SET_COLOR(state2, 0, 0, 0);   // Off
+    }
+    else if (status_led_state == NORMAL_OP) {
+        SET_COLOR(state1, 0, 255, 0); // Green
+        SET_COLOR(state2, 0, 255, 0); // Green
+    }
+    else {
+        // OFF or unknown
+        SET_COLOR(state1, 0, 0, 0); // Off
+        SET_COLOR(state2, 0, 0, 0); // Off
+    }
+}
+
+/* Function to set the device status and update the LED status accordingly
+ * 
+ * @param bitMask: The bitmask representing the status to be set
+ *        op: The operation to be performed (0 for clear, 1 for set)
+ */
+void set_device_status(uint8_t op, int bitMask)
+{
+    if(op)
+    {
+        status_led_state |= (DEVICE_STATUS)bitMask; // Set the bits specified in bitMask
+    }
+    else
+    {
+        status_led_state &= ~(DEVICE_STATUS)bitMask; // Clear the bits specified in bitMask
+    }
+
+    set_led_status();
+
+    // ESP_LOGI(DEVICE_TAG, "Device status set to: %s", get_enum_name(ENUM_DEVICE_STATUS, device_status));
 }

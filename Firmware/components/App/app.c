@@ -1,0 +1,132 @@
+#include "app.h"
+#include <nvs_flash.h>
+#include <esp_log.h>
+
+device_data_t device_data = {0};
+
+esp_err_t device_data_init(void)
+{
+    ESP_ERROR_CHECK(nvs_flash_init());
+
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READONLY, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(DEVICE_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        if(err == ESP_ERR_NVS_NOT_FOUND)
+        {
+            err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
+            device_data.mode = MANUAL_MODE;
+            device_data.target_temp = 0;
+            nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
+            nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
+            ESP_LOGW(DEVICE_TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+            ESP_LOGW(DEVICE_TAG, "Target temp not set. Setting to 0.");
+            nvs_commit(nvs);
+        }
+        // return err;
+    }
+    else
+    {
+        err = nvs_get_i8(nvs, NVS_KEY_MODE, (int8_t*)&device_data.mode);
+        if (err != ESP_OK)
+        {
+            device_data.mode = MANUAL_MODE;
+            ESP_LOGE(DEVICE_TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+            nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
+            nvs_commit(nvs);
+        }
+        size_t target_temp_len = sizeof(device_data.target_temp);
+        err = nvs_get_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, &target_temp_len);
+        if (err != ESP_OK)
+        {
+            device_data.target_temp = 0;
+            ESP_LOGE(DEVICE_TAG, "Target temp not set. Setting to 0.");
+            nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
+            nvs_commit(nvs);
+        }
+    }
+
+    ESP_LOGW(DEVICE_TAG, "Device mode: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+    ESP_LOGW(DEVICE_TAG, "Target temp: %0.2f", device_data.target_temp);
+
+    nvs_close(nvs);
+
+    return err;
+}
+
+/* Function for storing device values in nvs
+ * @param op: operation to perform
+              0: store device mode
+              1: store target temperature
+ */
+esp_err_t device_data_set(uint8_t op)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(DEVICE_TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        set_device_status(1, ERROR);
+        return err;
+    }
+    if(op == 0)
+    {
+        err = nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
+    }
+    else if(op == 1)
+    {
+        err |= nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
+    }
+    // else if(op == 2)
+    // {
+    //     err |= nvs_set_str(nvs, NVS_KEY_SSID, device_data.ssid);
+    //     err |= nvs_set_str(nvs, NVS_KEY_PASSWORD, device_data.password);
+    // }
+
+    nvs_commit(nvs);
+    nvs_close(nvs);
+
+    return err;
+}
+
+// esp_err_t reset_device_and_erase_nvs()
+// {
+//     esp_err_t err;
+
+//     // Erase all NVS partitions
+//     err = nvs_flash_erase();
+//     if (err != ESP_OK) {
+//         ESP_LOGE("RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
+//         return err;
+//     }
+
+//     ESP_LOGI("RESET", "NVS erased, restarting device...");
+//     return err;
+// }
+
+void set_target_temp(float target_temp)
+{
+    device_data.target_temp = target_temp;
+    ESP_LOGD(DEVICE_TAG, "Target temperature set to: %.2f", device_data.target_temp);
+
+    device_data_set(1);
+}
+
+float get_target_temp(void)
+{
+    return device_data.target_temp;
+}
+
+void set_device_mode(DEVICE_MODE mode)
+{
+    device_data.mode = mode;
+    // ESP_LOGD(DEVICE_TAG, "Device mode set to: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+
+    device_data_set(0);
+}
+
+DEVICE_MODE get_device_mode(void)
+{
+    return device_data.mode;
+}

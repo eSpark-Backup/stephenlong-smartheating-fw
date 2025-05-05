@@ -2,7 +2,7 @@ set(COMPONENT_ADD_INCLUDEDIRS "include")
 
 idf_component_register(SRCS "MLX90614_API.c" "MLX90614_SMBus_Driver.c"
                        INCLUDE_DIRS "include"
-                       REQUIRES driver )
+                       REQUIRES driver esp_timer)
                      #   PRIV_INCLUDE_DIRS "private_include"
                      #   REQUIRES mbedtls spi_flash esp_hw_support
                      #   PRIV_REQUIRES console spiffs)
