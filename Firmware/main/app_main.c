@@ -51,10 +51,13 @@ static void IRAM_ATTR button_isr_handler(void *arg)
 
         if (press_duration >= BUTTON_FACTORY_RESET * 1000000) {
             ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nPerforming factory reset", press_duration / 1000);
+            reset_device_and_erase_nvs();
         } else if (press_duration >= BUTTON_PAIRMODE_THRESHOLD * 1000000) {
             ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nStarting pairmode", press_duration / 1000);
+            start_softap_provisioning();
         } else {
             ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nPowering off", press_duration / 1000);
+            esp_restart();
         }
     }
 }
@@ -105,6 +108,11 @@ void execute_command(void)
         ESP_LOGI(GATTS_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
         esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(err, NULL, 0);
+        break;
+    case CHANGE_DEVICE_MODE:
+        ESP_LOGI(GATTS_TAG, "Setting device mode to %d", *(uint8_t*)bleParameters[0]);
+        set_heater_mode((DEVICE_MODE)*(uint8_t*)bleParameters[0]);
+        send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     
     default:

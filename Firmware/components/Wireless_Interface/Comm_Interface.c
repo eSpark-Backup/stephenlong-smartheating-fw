@@ -17,6 +17,7 @@ char *cmdStringFetch[]  = {
     "setTargetTemp",
     "readRelayState",
     "setRelays",
+    "setDeviceMode",
 };
 
 void ble_command_task(void * pvParameters)
@@ -254,6 +255,21 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
         }
         memcpy(relay_state, &packet[1], 1);
         bleParameters[0] = relay_state;
+        break;
+
+    case CHANGE_DEVICE_MODE:
+        if (!allow_all) {
+            blecmd = NO_COMMAND;
+            break;
+        }
+
+        char* mode = (char*)(malloc(1));
+        if (!mode) {
+            ESP_LOGE(GATTS_TAG, "Memory allocation failed for relay state parameter.!\n");
+            return 0;
+        }
+        memcpy(mode, &packet[1], 1);
+        bleParameters[0] = mode;
         break;
 
     default:
