@@ -32,15 +32,6 @@ void heater_interface_init(void)
     };
     gpio_config(&io_conf);
 
-    // HEATER_STATE status = HEATER_OFF;
-    // while(1)
-    // {
-    //     status++;
-    //     set_heater_state(status%4); // Initialize heater state to OFF
-    //     ESP_LOGD(TAG, "Heater state: %d", status%4);
-    //     vTaskDelay(pdMS_TO_TICKS(500)); // Delay for 1 second
-    // }
-
     set_heater_mode(get_device_mode());
 }
 
@@ -50,7 +41,7 @@ void set_heater_mode(DEVICE_MODE mode)
     {
         set_device_mode(mode);
     }
-    
+
     switch(mode)
     {
         case MANUAL_MODE:
@@ -74,6 +65,15 @@ void set_heater_mode(DEVICE_MODE mode)
         default:
             ESP_LOGE(TAG, "Mode not supported");
             break;
+    }
+}
+
+void set_heater_temp(float temp)
+{
+    set_target_temp(temp);
+    if(get_device_mode() != AUTO_MODE)
+    {
+        operate_heater();
     }
 }
 

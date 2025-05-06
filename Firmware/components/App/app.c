@@ -1,4 +1,5 @@
 #include "app.h"
+#include "Comm_Interface.h"
 #include <nvs_flash.h>
 #include <esp_log.h>
 
@@ -52,6 +53,16 @@ esp_err_t device_data_init(void)
 
     nvs_close(nvs);
 
+    err = load_wifi_credentials(device_data.ssid, device_data.password);
+    if(err == ESP_OK)
+    {
+        ESP_LOGW(DEVICE_TAG, "WiFi credentials loaded.");
+        ESP_LOGW(DEVICE_TAG, "SSID: %s", device_data.ssid);
+        ESP_LOGW(DEVICE_TAG, "Password: %s", device_data.password);
+    }
+
+    ESP_LOGI(DEVICE_TAG, "Device data initialized.");
+
     return err;
 }
 
@@ -90,20 +101,20 @@ esp_err_t device_data_set(uint8_t op)
     return err;
 }
 
-// esp_err_t reset_device_and_erase_nvs()
-// {
-//     esp_err_t err;
+esp_err_t reset_device_and_erase_nvs()
+{
+    esp_err_t err;
 
-//     // Erase all NVS partitions
-//     err = nvs_flash_erase();
-//     if (err != ESP_OK) {
-//         ESP_LOGE("RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
-//         return err;
-//     }
+    // Erase all NVS partitions
+    err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        ESP_LOGE("RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
+        return err;
+    }
 
-//     ESP_LOGI("RESET", "NVS erased, restarting device...");
-//     return err;
-// }
+    ESP_LOGI("RESET", "NVS erased, restarting device...");
+    return err;
+}
 
 void set_target_temp(float target_temp)
 {

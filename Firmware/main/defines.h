@@ -7,8 +7,8 @@
 #include <esp_log.h>
 #include <hal/i2c_types.h>
 
-#define COMPANY_ID                  0x0EC3
 #define COMPANY_NAME                "HERSCHEL"
+#define COMPANY_ID                  0x0EC3
 
 #define IR_SENSOR_I2C_INTERFACE     I2C_NUM_0
 #define IR_SENSOR_I2C_ADDR1         0x5A         // Default sensor slave address
@@ -25,8 +25,6 @@
 #define BUTTON_FACTORY_RESET        30            // seconds
 #define BUTTON_DEBOUNCE_MS          50
 #define BUTTON_GPIO                 4               // <-- Your GPIO pin
-// #define GPIO_INPUT_PIN_SEL(x)        (1ULL<<x)
-// #define GPIO_OUTPUT_PIN_SEL(x)       (1ULL<<x)
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
 
 #define AP_RECONN_ATTEMPTS          5
@@ -37,24 +35,25 @@
 #define WIFI_PASS_MAX_LEN           64
 
 #define DEVICE_TAG                  "APP"    
+#define GPIO_TAG                    "GPIO"
 #define WIFI_TAG                    "_SoftAP"
 #define GATTS_TAG                   "_BLE"
-#define GPIO_TAG                    "GPIO"
 #define ISR_TAG                     "_ISR"
 
 #define BLE_RESPONSE_SUCCESS        0xA1
 #define BLE_RESPONSE_FAIL           0xA2
 
 #define PROFILE_NUM                 2
-#define PROFILE_A_APP_ID            0
+#define PROFILE_PROV_APP_ID         0
 #define PROFILE_UART_APP_ID         1
 
+#define BLE_DEVICE_NAME             COMPANY_NAME "_000001"
 #define GATTS_SERVICE_UUID          COMPANY_ID // Wifi Prov
-#define GATTS_CHAR_UUID             0xFF01
 #define GATTS_NUM_HANDLE_A          4
 #define GATTS_NUM_HANDLE_B          8
 #define GATTS_CHAR_VAL_LEN_MAX      0x40
 #define PREPARE_BUF_MAX_SIZE        1024
+#define CONFIG_SET_RAW_ADV_DATA     0
 
 #define NVS_NAMESPACE_DEVICEDATA   "device_data"
 #define NVS_NAMESPACE_WIFIDATA     "wifi_storage"

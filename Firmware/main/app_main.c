@@ -1,14 +1,3 @@
-/* SoftAP based Provisioning Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
-// #include "BLE.h"
-// #include "wifiProv.h"
-
 #include <string.h>
 // #include <freertos/FreeRTOS.h>
 // #include <freertos/task.h>
@@ -25,7 +14,7 @@
 #include "driver/gpio.h"
 
 // #include "esp_bt.h"
-#include "cJSON.h"
+// #include "cJSON.h"
 
 // #include "esp_gap_ble_api.h"
 // #include "esp_gatts_api.h"
@@ -41,16 +30,11 @@
 #include "Status_led.h"
 #include "Comm_Interface.h"
 
-// device_data_t device_data = {0};
-
-// static const char *TAG = "gpio_isr";
 // bool gpio_isr_handler_flag = false;
 // bool uart_cmd_handler_flag = false;
 // static prepare_type_env_t a_prepare_write_env;
 
 
-// esp_err_t device_data_init(void);
-// esp_err_t device_data_set(void);
 // void start_softap_provisioning(void);
 /// Declare the static function
 // static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
@@ -203,7 +187,7 @@ static uint8_t raw_scan_rsp_data[] = { // Length 15, Data Type 9 (Complete Local
 
 // /* One gatt-based profile one app_id and one gatts_if, this array will store the gatts_if returned by ESP_GATTS_REG_EVT */
 // static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
-//     [PROFILE_A_APP_ID] = {
+//     [PROFILE_PROV_APP_ID] = {
 //         .gatts_cb = gatts_profile_a_event_handler,
 //         .gatts_if = ESP_GATT_IF_NONE,
 //     },
@@ -779,10 +763,10 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //     {
 //     case ESP_GATTS_REG_EVT:
 //         // ESP_LOGI(GATTS_TAG, "REGISTER_APP_EVT, status %d, app_id %d\n", param->reg.status, param->reg.app_id);
-//         gl_profile_tab[PROFILE_A_APP_ID].service_id.is_primary = true;
-//         gl_profile_tab[PROFILE_A_APP_ID].service_id.id.inst_id = 0x00;
-//         gl_profile_tab[PROFILE_A_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_16;
-//         gl_profile_tab[PROFILE_A_APP_ID].service_id.id.uuid.uuid.uuid16 = GATTS_SERVICE_UUID;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.is_primary = true;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.id.inst_id = 0x00;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_16;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.id.uuid.uuid.uuid16 = GATTS_SERVICE_UUID;
 
 //         esp_err_t set_dev_name_ret = esp_ble_gap_set_device_name(SSID_WIFI);
 //         if (set_dev_name_ret)
@@ -819,7 +803,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //         adv_config_done |= scan_rsp_config_flag;
 
 // #endif
-//         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_A_APP_ID].service_id, GATTS_NUM_HANDLE_A);
+//         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_PROV_APP_ID].service_id, GATTS_NUM_HANDLE_A);
 //         break;
 
 //     case ESP_GATTS_WRITE_EVT:
@@ -828,7 +812,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //         if (!param->write.is_prep)
 //         {
 //             // esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
-//             if (gl_profile_tab[PROFILE_A_APP_ID].descr_handle == param->write.handle && param->write.len == 2)
+//             if (gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle == param->write.handle && param->write.len == 2)
 //             {
 //                 uint16_t descr_value = param->write.value[1] << 8 | param->write.value[0];
 //                 if (descr_value == 0x0001)
@@ -842,7 +826,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //                             notify_data[i] = i % 0xff;
 //                         }
 //                         // the size of notify_data[] need less than MTU size
-//                         esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_A_APP_ID].char_handle,
+//                         esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle,
 //                                                     sizeof(notify_data), notify_data, false);
 //                     }
 //                 }
@@ -857,7 +841,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //                             indicate_data[i] = i % 0xff;
 //                         }
 //                         // the size of indicate_data[] need less than MTU size
-//                         esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_A_APP_ID].char_handle,
+//                         esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle,
 //                                                     sizeof(indicate_data), indicate_data, true);
 //                     }
 //                 }
@@ -883,13 +867,13 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 
 //     case ESP_GATTS_CREATE_EVT:
 //         // ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d,  service_handle %d\n", param->create.status, param->create.service_handle);
-//         gl_profile_tab[PROFILE_A_APP_ID].service_handle = param->create.service_handle;
-//         gl_profile_tab[PROFILE_A_APP_ID].char_uuid.len = ESP_UUID_LEN_16;
-//         gl_profile_tab[PROFILE_A_APP_ID].char_uuid.uuid.uuid16 = GATTS_CHAR_UUID;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].service_handle = param->create.service_handle;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].char_uuid.len = ESP_UUID_LEN_16;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].char_uuid.uuid.uuid16 = GATTS_CHAR_UUID;
 
-//         esp_ble_gatts_start_service(gl_profile_tab[PROFILE_A_APP_ID].service_handle);
+//         esp_ble_gatts_start_service(gl_profile_tab[PROFILE_PROV_APP_ID].service_handle);
 //         a_property = ESP_GATT_CHAR_PROP_BIT_WRITE;
-//         esp_err_t add_char_ret = esp_ble_gatts_add_char(gl_profile_tab[PROFILE_A_APP_ID].service_handle, &gl_profile_tab[PROFILE_A_APP_ID].char_uuid,
+//         esp_err_t add_char_ret = esp_ble_gatts_add_char(gl_profile_tab[PROFILE_PROV_APP_ID].service_handle, &gl_profile_tab[PROFILE_PROV_APP_ID].char_uuid,
 //                                                         ESP_GATT_PERM_WRITE,
 //                                                         a_property,
 //                                                         &gatts_demo_char1_val, NULL);
@@ -899,7 +883,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //         }
 //         break;
 //     case ESP_GATTS_ADD_CHAR_DESCR_EVT:
-//         gl_profile_tab[PROFILE_A_APP_ID].descr_handle = param->add_char_descr.attr_handle;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle = param->add_char_descr.attr_handle;
 //         // ESP_LOGI(GATTS_TAG, "ADD_DESCR_EVT, status %d, attr_handle %d, service_handle %d\n",
 //                 //  param->add_char_descr.status, param->add_char_descr.attr_handle, param->add_char_descr.service_handle);
 //         break;
@@ -920,7 +904,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //                 //  param->connect.conn_id,
 //                 //  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
 //                 //  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
-//         gl_profile_tab[PROFILE_A_APP_ID].conn_id = param->connect.conn_id;
+//         gl_profile_tab[PROFILE_PROV_APP_ID].conn_id = param->connect.conn_id;
 //         // start sent the update connection parameters to the peer device.
 //         esp_ble_gap_update_conn_params(&conn_params);
 //         break;
@@ -1102,8 +1086,8 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 // {
 //     /* If event is register event, store the gatts_if for each profile */
 //     if (event == ESP_GATTS_REG_EVT) {
-//         if (param->reg.app_id == PROFILE_A_APP_ID) {
-//             gl_profile_tab[PROFILE_A_APP_ID].gatts_if = gatts_if;
+//         if (param->reg.app_id == PROFILE_PROV_APP_ID) {
+//             gl_profile_tab[PROFILE_PROV_APP_ID].gatts_if = gatts_if;
 //         } else if (param->reg.app_id == PROFILE_UART_APP_ID) {
 //             gl_profile_tab[PROFILE_UART_APP_ID].gatts_if = gatts_if;
 //         }
@@ -1172,7 +1156,7 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
 //         ESP_LOGE(GATTS_TAG, "gap register error, error code = %x", ret);
 //         return;
 //     }
-//     ret = esp_ble_gatts_app_register(PROFILE_A_APP_ID);
+//     ret = esp_ble_gatts_app_register(PROFILE_PROV_APP_ID);
 //     if (ret)
 //     {
 //         ESP_LOGE(GATTS_TAG, "gatts app register error, error code = %x", ret);
@@ -1273,41 +1257,31 @@ void button_init(void)
 
 void app_main(void)
 {
-    status_led_init();
+    // status_led_init();
     device_data_init();
-    button_init();
+    // button_init();
 
-    ir_sensor_init();
-    heater_interface_init();
+    // ir_sensor_init();
+    // heater_interface_init();
 
-    set_target_temp(27.5);
-    set_heater_mode(AUTO_MODE);
+    // set_heater_temp(27.5);
+    // set_heater_mode(AUTO_MODE);
+    
+    comm_init();
 
-    // /* Initialize networking stack */
-    // ESP_ERROR_CHECK(esp_netif_init());
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    // /* Initialize Wi-Fi including netif with default config */
-    // esp_netif_create_default_wifi_sta();
-    // esp_netif_create_default_wifi_ap();
-    // wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    // ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    // char ssid[WIFI_SSID_MAX_LEN] = {0}, password[WIFI_PASS_MAX_LEN] = {0};
-    // if (load_wifi_credentials(device_data.ssid, device_data.password) == ESP_OK)
-    // {
-    //     ESP_LOGI(WIFI_TAG, "Connecting to saved WiFi: %s\tPassword: %s", ssid, password);
-    //     wifi_init_sta(ssid, password);
-    //     start_ble_provisioning();
-    // }
-    // else
-    // {
-    //     ESP_LOGI(WIFI_TAG, "Starting SoftAP for provisioning");
-    //     start_softap_provisioning();
-    //     ESP_LOGI(WIFI_TAG, "Starting BLE for provisioning");
-    //     start_ble_provisioning();
-    //     device_status = PAIRING;
-    // }
+    if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
+    {
+        ESP_LOGI(WIFI_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+        wifi_init_sta(device_data.ssid, device_data.password);
+        // start_ble_provisioning();
+    }
+    else
+    {
+        ESP_LOGI(WIFI_TAG, "Starting SoftAP for provisioning");
+        start_softap_provisioning();
+        ESP_LOGI(WIFI_TAG, "Starting BLE for provisioning");
+        // start_ble_provisioning();
+    }
 
     // while(1)
     // {

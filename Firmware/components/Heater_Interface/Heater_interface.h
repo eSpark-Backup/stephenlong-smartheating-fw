@@ -12,6 +12,7 @@
 
 void heater_interface_init(void);
 void set_heater_mode(DEVICE_MODE mode);
+void set_heater_temp(float temp);
 esp_err_t set_heater_state(HEATER_STATE state);
 HEATER_STATE get_heater_state(void);
 HEATER_STATE control_heater(float setpoint, float current_temp);
