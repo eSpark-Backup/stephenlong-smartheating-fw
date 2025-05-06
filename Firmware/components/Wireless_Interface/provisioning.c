@@ -4,6 +4,7 @@
 
 #define TAG "PROVISION_MANAGER"
 
+uint16_t temp_char_handle = 0;
 
 // SoftAP
 void start_softap_provisioning(void)
@@ -142,6 +143,7 @@ void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_e
     {
         if (param->write.is_prep)
         {
+            temp_char_handle = param->write.handle;
             if (prepare_write_env->prepare_buf == NULL)
             {
                 prepare_write_env->prepare_buf = (uint8_t *)malloc(PREPARE_BUF_MAX_SIZE * sizeof(uint8_t));
@@ -190,6 +192,27 @@ void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_e
         {
             esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, status, NULL);
         }
+
+        if(!param->write.is_prep)
+        {
+            // ESP_LOGI(GATTS_TAG, "param->write.conn_id %d", param->write.conn_id);
+            // ESP_LOGI(GATTS_TAG, "param->write.handle %d", param->write.handle);
+            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_UART_APP_ID].descr_handle);
+            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle);
+            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] );
+            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] );
+            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] );
+            if ( param->write.handle == gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0])
+            {
+                ESP_LOGD(GATTS_TAG, "calling 'cmd'");
+                parse_command( param->write.value, param->write.len , "cmd");
+            }
+            else if ( param->write.handle == gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0])
+            {
+                ESP_LOGD(GATTS_TAG, "calling 'wifi'");
+                parse_command( param->write.value, param->write.len , "wifi");
+            }
+        }
     }
 }
 
@@ -197,7 +220,24 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
 {
     if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
     {
-        parse_ble_write_data(prepare_write_env->prepare_buf, prepare_write_env->prepare_len);
+        // ESP_LOGI(GATTS_TAG, "param->write.conn_id %d", param->write.conn_id);
+        // ESP_LOGI(GATTS_TAG, "param->write.handle %d", param->write.handle);
+        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_UART_APP_ID].descr_handle);
+        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle);
+        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] );
+        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] );
+        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] );
+        if ( temp_char_handle == gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0])
+        // if (param->write.conn_id == gl_profile_tab[PROFILE_UART_APP_ID].conn_id)
+        {
+            ESP_LOGD(GATTS_TAG, "calling 'cmd'");
+            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "cmd");
+        }
+        else if ( temp_char_handle == gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0])
+        {
+            ESP_LOGD(GATTS_TAG, "calling 'wifi'");
+            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "wifi");
+        }
     }
     else
     {
@@ -211,103 +251,103 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
     prepare_write_env->prepare_len = 0;
 }
 
-void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param)
-{
-    if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
-    {
-        // parse_ble_write_data(prepare_write_env->prepare_buf, prepare_write_env->prepare_len);
-        char *cmd_value = parse_JSON( param->write.value, param->write.len , "cmd");
+// void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param)
+// {
+//     if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
+//     {
+//         // parse_ble_write_data(prepare_write_env->prepare_buf, prepare_write_env->prepare_len);
+//         char *cmd_value = parse_JSON( param->write.value, param->write.len , "cmd");
 
-    }
-    else
-    {
-        ESP_LOGI(GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
-    }
-    if (prepare_write_env->prepare_buf)
-    {
-        free(prepare_write_env->prepare_buf);
-        prepare_write_env->prepare_buf = NULL;
-    }
-    prepare_write_env->prepare_len = 0;
-}
+//     }
+//     else
+//     {
+//         ESP_LOGI(GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
+//     }
+//     if (prepare_write_env->prepare_buf)
+//     {
+//         free(prepare_write_env->prepare_buf);
+//         prepare_write_env->prepare_buf = NULL;
+//     }
+//     prepare_write_env->prepare_len = 0;
+// }
 
-void parse_ble_write_data(uint8_t *data, int len)
-{
+// void parse_ble_write_data(uint8_t *data, int len)
+// {
   
-    char json_str[len + 1]; // Create a buffer with space for null terminator
-    memcpy(json_str, data, len);
-    json_str[len] = '\0'; // Ensure null termination
+//     char json_str[len + 1]; // Create a buffer with space for null terminator
+//     memcpy(json_str, data, len);
+//     json_str[len] = '\0'; // Ensure null termination
 
-    ESP_LOGI(GATTS_TAG, "Received JSON: %s", json_str);
+//     ESP_LOGI(GATTS_TAG, "Received JSON: %s", json_str);
 
-    // Parse JSON
-    cJSON *json = cJSON_Parse(json_str);
-    if (json == NULL)
-    {
-        ESP_LOGE(GATTS_TAG, "Failed to parse JSON");
-        return;
-    }
+//     // Parse JSON
+//     cJSON *json = cJSON_Parse(json_str);
+//     if (json == NULL)
+//     {
+//         ESP_LOGE(GATTS_TAG, "Failed to parse JSON");
+//         return;
+//     }
 
-    // Extract ssid
-    cJSON *ssid_item = cJSON_GetObjectItem(json, "ssid");
-    cJSON *password_item = cJSON_GetObjectItem(json, "password");
+//     // Extract ssid
+//     cJSON *ssid_item = cJSON_GetObjectItem(json, "ssid");
+//     cJSON *password_item = cJSON_GetObjectItem(json, "password");
 
-    if (ssid_item && cJSON_IsString(ssid_item) && (ssid_item->valuestring != NULL))
-    {
-        ESP_LOGI(GATTS_TAG, "SSID: %s", ssid_item->valuestring);
-    }
-    else
-    {
-        ESP_LOGE(GATTS_TAG, "Failed to extract SSID");
-    }
+//     if (ssid_item && cJSON_IsString(ssid_item) && (ssid_item->valuestring != NULL))
+//     {
+//         ESP_LOGI(GATTS_TAG, "SSID: %s", ssid_item->valuestring);
+//     }
+//     else
+//     {
+//         ESP_LOGE(GATTS_TAG, "Failed to extract SSID");
+//     }
 
-    if (password_item && cJSON_IsString(password_item) && (password_item->valuestring != NULL))
-    {
-        ESP_LOGI(GATTS_TAG, "Password: %s", password_item->valuestring);
-    }
-    else
-    {
-        ESP_LOGE(GATTS_TAG, "Failed to extract Password");
-    }
-    if (ssid_item && password_item)
-    {
-        save_wifi_credentials(ssid_item->valuestring, password_item->valuestring);
-        esp_restart();
-    }
-    else
-    {
-        ESP_LOGE(GATTS_TAG, "Creds not received correctly!");
-    }
+//     if (password_item && cJSON_IsString(password_item) && (password_item->valuestring != NULL))
+//     {
+//         ESP_LOGI(GATTS_TAG, "Password: %s", password_item->valuestring);
+//     }
+//     else
+//     {
+//         ESP_LOGE(GATTS_TAG, "Failed to extract Password");
+//     }
+//     if (ssid_item && password_item)
+//     {
+//         save_wifi_credentials(ssid_item->valuestring, password_item->valuestring);
+//         esp_restart();
+//     }
+//     else
+//     {
+//         ESP_LOGE(GATTS_TAG, "Creds not received correctly!");
+//     }
 
-    cJSON_Delete(json); // Free memory
-}
+//     cJSON_Delete(json); // Free memory
+// }
 
-char * parse_JSON(uint8_t *data, int len , const char *property)
-{
-    char json_str[len + 1]; // Create a buffer with space for null terminator
-    memcpy(json_str, data, len);
-    json_str[len] = '\0'; // Ensure null termination
+// char * parse_JSON(uint8_t *data, int len , const char *property)
+// {
+//     char json_str[len + 1]; // Create a buffer with space for null terminator
+//     memcpy(json_str, data, len);
+//     json_str[len] = '\0'; // Ensure null termination
 
-    ESP_LOGI(GATTS_TAG, "Received JSON: %s", json_str);    
-    // Parse JSON
-    cJSON *json = cJSON_Parse(json_str);
-    if (json == NULL)
-    {
-        ESP_LOGE(GATTS_TAG, "Failed to parse JSON");
-        return 0;
-    }
+//     ESP_LOGI(GATTS_TAG, "Received JSON: %s", json_str);    
+//     // Parse JSON
+//     cJSON *json = cJSON_Parse(json_str);
+//     if (json == NULL)
+//     {
+//         ESP_LOGE(GATTS_TAG, "Failed to parse JSON");
+//         return 0;
+//     }
 
-    cJSON *property_JSON = cJSON_GetObjectItem(json, property);
+//     cJSON *property_JSON = cJSON_GetObjectItem(json, property);
 
     
-    if (property_JSON && cJSON_IsString(property_JSON) && (property_JSON->valuestring != NULL))
-    {
-        ESP_LOGI(GATTS_TAG, "%s : %s", property , property_JSON->valuestring);
-        return(property_JSON->valuestring);
-    }
-    else
-    {
-        ESP_LOGE(GATTS_TAG, "Failed to extract Property value");
-        return 0;
-    }
-}
+//     if (property_JSON && cJSON_IsString(property_JSON) && (property_JSON->valuestring != NULL))
+//     {
+//         ESP_LOGI(GATTS_TAG, "%s : %s", property , property_JSON->valuestring);
+//         return(property_JSON->valuestring);
+//     }
+//     else
+//     {
+//         ESP_LOGE(GATTS_TAG, "Failed to extract Property value");
+//         return 0;
+//     }
+// }

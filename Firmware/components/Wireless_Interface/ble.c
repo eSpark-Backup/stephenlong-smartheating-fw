@@ -73,10 +73,13 @@ struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
     [PROFILE_PROV_APP_ID] = {
         .gatts_cb = gatts_prov_event_handler,
         .gatts_if = ESP_GATT_IF_NONE,
+        .char_count = 0,
     },
     [PROFILE_UART_APP_ID] = {
         .gatts_cb = gatts_uart_event_handler,
-        .gatts_if = ESP_GATT_IF_NONE, }
+        .gatts_if = ESP_GATT_IF_NONE,
+        .char_count = 0,
+    }
 };
 
 static uint8_t char1_str[] = {0x11, 0x22, 0x33};
@@ -154,12 +157,6 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     }
 }
 
-static uint16_t wifi_service_handle = 0;
-static uint16_t uart_service_handle = 0;
-
-static esp_gatt_srvc_id_t wifi_service_id;
-static esp_gatt_srvc_id_t uart_service_id;
-
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
     /* If event is register event, store the gatts_if for each profile */
@@ -169,6 +166,11 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
         } else if (param->reg.app_id == PROFILE_UART_APP_ID) {
             gl_profile_tab[PROFILE_UART_APP_ID].gatts_if = gatts_if;
         }
+    }
+    else if(event == ESP_GATTS_DISCONNECT_EVT)
+    {
+        ESP_LOGI(GATTS_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
+        esp_ble_gap_start_advertising(&adv_params);
     }
 
     /* If the gatts_if equal to profile A, call profile A cb handler,
@@ -188,57 +190,6 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
             }
         }
     } while (0);
-
-    // switch (event) {
-    //     case ESP_GATTS_REG_EVT:
-    //         ESP_LOGI(GATTS_TAG, "REGISTER_APP_EVT, status %d, app_id %d", 
-    //                     param->reg.status, param->reg.app_id);
-
-    //         // Define Wi-Fi service
-    //         wifi_service_id.is_primary = true;
-    //         wifi_service_id.id.inst_id = 0;
-    //         memcpy(wifi_service_id.id.uuid.uuid.uuid128, prov_service_uuid, ESP_UUID_LEN_128);
-    //         wifi_service_id.id.uuid.len = ESP_UUID_LEN_128;
-
-    //         // Define UART service
-    //         uart_service_id.is_primary = true;
-    //         uart_service_id.id.inst_id = 1;
-    //         memcpy(uart_service_id.id.uuid.uuid.uuid128, uart_service_uuid, ESP_UUID_LEN_128);
-    //         uart_service_id.id.uuid.len = ESP_UUID_LEN_128;
-
-    //         // Create both services
-    //         esp_ble_gatts_create_service(gatts_if, &wifi_service_id, GATTS_NUM_HANDLE_B);
-    //         esp_ble_gatts_create_service(gatts_if, &uart_service_id, GATTS_NUM_HANDLE_B);
-    //         break;
-
-    //     case ESP_GATTS_CREATE_EVT:
-    //         if (param->create.status == ESP_GATT_OK) {
-    //             if (memcmp(param->create.service_id.id.uuid.uuid.uuid128, prov_service_uuid, ESP_UUID_LEN_128) == 0) {
-    //                 wifi_service_handle = param->create.service_handle;
-    //                 esp_ble_gatts_start_service(wifi_service_handle);
-    //             } else if (memcmp(param->create.service_id.id.uuid.uuid.uuid128, uart_service_uuid, ESP_UUID_LEN_128) == 0) {
-    //                 uart_service_handle = param->create.service_handle;
-    //                 esp_ble_gatts_start_service(uart_service_handle);
-    //             }
-    //         }
-    //         break;
-
-    //     case ESP_GATTS_START_EVT:
-    //         ESP_LOGI(GATTS_TAG, "Service started: handle %d", param->start.service_handle);
-    //         break;
-
-    //     case ESP_GATTS_CONNECT_EVT:
-    //         ESP_LOGI(GATTS_TAG, "Client connected");
-    //         break;
-
-    //     case ESP_GATTS_DISCONNECT_EVT:
-    //         ESP_LOGI(GATTS_TAG, "Client disconnected, restarting adv");
-    //         esp_ble_gap_start_advertising(&adv_params);
-    //         break;
-
-    //     default:
-    //         break;
-    // }
 }
 
 void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
@@ -246,7 +197,7 @@ void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
     switch (event)
     {
     case ESP_GATTS_REG_EVT:
-        ESP_LOGD(GATTS_TAG, "REGISTER_APP_EVT, status %d, app_id %d\n", param->reg.status, param->reg.app_id);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_REG_EVT, status %d, app_id %d", param->reg.status, param->reg.app_id);
         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.is_primary = true;
         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.id.inst_id = 0x00;
         gl_profile_tab[PROFILE_PROV_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_128;
@@ -257,78 +208,8 @@ void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
         esp_ble_gatts_create_service(gatts_if, &gl_profile_tab[PROFILE_PROV_APP_ID].service_id, GATTS_NUM_HANDLE_A);
         break;
 
-    case ESP_GATTS_WRITE_EVT:
-    {
-        // ESP_LOGI(GATTS_TAG, "PROV_WRITE_EVT");
-        if(param->write.len > 0)
-        {
-            ESP_LOGI(GATTS_TAG, "Received data:");
-            ESP_LOG_BUFFER_HEX(GATTS_TAG, param->write.value, param->write.len);
-        }
-        if (!param->write.is_prep)
-        {
-            // ESP_LOGI(GATTS_TAG, "Received data:");
-            // ESP_LOG_BUFFER_HEX(GATTS_TAG, param->write.value, param->write.len);
-            if (gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle == param->write.handle && param->write.len == 2)
-            {
-                uint16_t descr_value = param->write.value[1] << 8 | param->write.value[0];
-                if (descr_value == 0x0001)
-                {
-                    if (a_property & ESP_GATT_CHAR_PROP_BIT_NOTIFY)
-                    {
-                        ESP_LOGI(GATTS_TAG, "notify enable");
-                        uint8_t notify_data[15];
-                        for (int i = 0; i < sizeof(notify_data); ++i)
-                        {
-                            notify_data[i] = i % 0xff;
-                        }
-                        // the size of notify_data[] need less than MTU size
-                        esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle,
-                                                    sizeof(notify_data), notify_data, false);
-                    }
-                }
-                else if (descr_value == 0x0002)
-                {
-                    if (a_property & ESP_GATT_CHAR_PROP_BIT_INDICATE)
-                    {
-                        ESP_LOGI(GATTS_TAG, "indicate enable");
-                        uint8_t indicate_data[15];
-                        for (int i = 0; i < sizeof(indicate_data); ++i)
-                        {
-                            indicate_data[i] = i % 0xff;
-                        }
-                        // the size of indicate_data[] need less than MTU size
-                        esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle,
-                                                    sizeof(indicate_data), indicate_data, true);
-                    }
-                }
-                else if (descr_value == 0x0000)
-                {
-                    ESP_LOGI(GATTS_TAG, "notify/indicate disable ");
-                }
-                else
-                {
-                    ESP_LOGE(GATTS_TAG, "unknown descr value");
-                    // esp_log_buffer_hex(GATTS_TAG, param->write.value, param->write.len);
-                }
-            }
-        }
-        else
-        {
-            parse_command(param->write.value, param->write.len, "wifi");
-        }
-
-        write_event_env(gatts_if, &a_prepare_write_env, param);
-        break;
-    }
-    case ESP_GATTS_EXEC_WRITE_EVT:
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
-        esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-        exec_write_event_env(&a_prepare_write_env, param);
-        break;
-
     case ESP_GATTS_CREATE_EVT:
-        // ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d,  service_handle %d\n", param->create.status, param->create.service_handle);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_CREATE_EVT, status %d,  service_handle %d", param->create.status, param->create.service_handle);
         gl_profile_tab[PROFILE_PROV_APP_ID].service_handle = param->create.service_handle;
         gl_profile_tab[PROFILE_PROV_APP_ID].char_uuid.len = ESP_UUID_LEN_128;
         // gl_profile_tab[PROFILE_PROV_APP_ID].char_uuid.uuid.uuid16 = GATTS_CHAR_UUID;
@@ -346,15 +227,88 @@ void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
             ESP_LOGE(GATTS_TAG, "add char failed, error code =%x", add_char_ret);
         }
         break;
+
+    case ESP_GATTS_ADD_CHAR_EVT:
+        gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[gl_profile_tab[PROFILE_PROV_APP_ID].char_count++] = param->add_char.attr_handle;
+
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_ADD_CHAR_EVT PROV PROFILE, attr_handle = %d", param->add_char.attr_handle);
+        break;
+
     case ESP_GATTS_ADD_CHAR_DESCR_EVT:
         gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle = param->add_char_descr.attr_handle;
-        // ESP_LOGI(GATTS_TAG, "ADD_DESCR_EVT, status %d, attr_handle %d, service_handle %d\n",
-                //  param->add_char_descr.status, param->add_char_descr.attr_handle, param->add_char_descr.service_handle);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_ADD_CHAR_DESCR_EVT, status %d, attr_handle %d, service_handle %d\n",
+                 param->add_char_descr.status, param->add_char_descr.attr_handle, param->add_char_descr.service_handle);
         break;
+
+    case ESP_GATTS_WRITE_EVT:
+    {
+        // ESP_LOGI(GATTS_TAG, "PROV_WRITE_EVT");
+        if(param->write.len > 0)
+        {
+            ESP_LOGI(GATTS_TAG, "Received data:");
+            ESP_LOG_BUFFER_HEX(GATTS_TAG, param->write.value, param->write.len);
+        }
+        if (!param->write.is_prep)
+        {
+            if (gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle == param->write.handle && param->write.len == 2)
+            {
+                uint16_t descr_value = param->write.value[1] << 8 | param->write.value[0];
+                if (descr_value == 0x0001)
+                {
+                    if (a_property & ESP_GATT_CHAR_PROP_BIT_NOTIFY)
+                    {
+                        ESP_LOGI(GATTS_TAG, "notify enable");
+                        uint8_t notify_data[15];
+                        for (int i = 0; i < sizeof(notify_data); ++i)
+                        {
+                            notify_data[i] = i % 0xff;
+                        }
+                        // the size of notify_data[] need less than MTU size
+                        esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[gl_profile_tab[PROFILE_PROV_APP_ID].char_count],
+                                                    sizeof(notify_data), notify_data, false);
+                    }
+                }
+                else if (descr_value == 0x0002)
+                {
+                    if (a_property & ESP_GATT_CHAR_PROP_BIT_INDICATE)
+                    {
+                        ESP_LOGI(GATTS_TAG, "indicate enable");
+                        uint8_t indicate_data[15];
+                        for (int i = 0; i < sizeof(indicate_data); ++i)
+                        {
+                            indicate_data[i] = i % 0xff;
+                        }
+                        // the size of indicate_data[] need less than MTU size
+                        esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[gl_profile_tab[PROFILE_PROV_APP_ID].char_count],
+                                                    sizeof(indicate_data), indicate_data, true);
+                    }
+                }
+                else if (descr_value == 0x0000)
+                {
+                    ESP_LOGI(GATTS_TAG, "notify/indicate disable ");
+                }
+                else
+                {
+                    ESP_LOGE(GATTS_TAG, "unknown descr value");
+                }
+            }
+        }
+
+        write_event_env(gatts_if, &a_prepare_write_env, param);
+        break;
+    }
+
+    case ESP_GATTS_EXEC_WRITE_EVT:
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
+        esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
+        exec_write_event_env(&a_prepare_write_env, param);
+        break;
+
     case ESP_GATTS_START_EVT:
-        // ESP_LOGI(GATTS_TAG, "SERVICE_START_EVT, status %d, service_handle %d\n",
-                //  param->start.status, param->start.service_handle);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_START_EVT, status %d, service_handle %d",
+                 param->start.status, param->start.service_handle);
         break;
+
     case ESP_GATTS_CONNECT_EVT:
     {
         esp_ble_conn_update_params_t conn_params = {0};
@@ -364,19 +318,16 @@ void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
         conn_params.max_int = 0x20; // max_int = 0x20*1.25ms = 40ms
         conn_params.min_int = 0x10; // min_int = 0x10*1.25ms = 20ms
         conn_params.timeout = 400;  // timeout = 400*10ms = 4000ms
-        // ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
-                //  param->connect.conn_id,
-                //  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
-                //  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
+                 param->connect.conn_id,
+                 param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
+                 param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
         gl_profile_tab[PROFILE_PROV_APP_ID].conn_id = param->connect.conn_id;
         // start sent the update connection parameters to the peer device.
         esp_ble_gap_update_conn_params(&conn_params);
         break;
     }
-    case ESP_GATTS_DISCONNECT_EVT:
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_DISCONNECT_EVT, disconnect reason 0x%x", param->disconnect.reason);
-        esp_ble_gap_start_advertising(&adv_params);
-        break;
+
     default:
         break;
     }
@@ -387,7 +338,7 @@ void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
     switch (event)
     {
     case ESP_GATTS_REG_EVT:
-        ESP_LOGI(GATTS_TAG, "REGISTER_APP_EVT, status %d, app_id %d", param->reg.status, param->reg.app_id);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_REG_EVT, status %d, app_id %d", param->reg.status, param->reg.app_id);
         gl_profile_tab[PROFILE_UART_APP_ID].service_id.is_primary = true;
         gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.inst_id = 0x00;
         gl_profile_tab[PROFILE_UART_APP_ID].service_id.id.uuid.len = ESP_UUID_LEN_128;
@@ -399,7 +350,7 @@ void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
         break;
 
     case ESP_GATTS_CREATE_EVT:
-        ESP_LOGI(GATTS_TAG, "CREATE_SERVICE_EVT, status %d, service_handle %d",
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_CREATE_EVT, status %d, service_handle %d",
                  param->create.status, param->create.service_handle);
 
         gl_profile_tab[PROFILE_UART_APP_ID].service_handle = param->create.service_handle;
@@ -438,81 +389,102 @@ void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
         break;
 
     case ESP_GATTS_ADD_CHAR_EVT:
-
- 
         // // gl_profile_tab[PROFILE_UART_APP_ID].char_handle = param->add_char.attr_handle; //tx
-        gl_profile_tab[PROFILE_UART_APP_ID].char1_handle = param->add_char.attr_handle; //rx
+        gl_profile_tab[PROFILE_UART_APP_ID].char_handle[gl_profile_tab[PROFILE_UART_APP_ID].char_count++] = param->add_char.attr_handle; //rx
 
-        ESP_LOGI(GATTS_TAG, "UART PROFILE ADD_CHAR_EVT, attr_handle = %d", param->add_char.attr_handle);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_ADD_CHAR_EVT UART PROFILE, attr_handle = %d", param->add_char.attr_handle);
         
-        esp_bt_uuid_t descr_uuid = {
-            .len = ESP_UUID_LEN_16,
-            .uuid = { .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG },
-        };
-    
-        esp_attr_value_t cccd_val = {
-            .attr_max_len = 2,
-            .attr_len = 2,
-            .attr_value = (uint8_t[]){0x00, 0x00},
-        };
-    
-        esp_ble_gatts_add_char_descr( gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
-                                      &descr_uuid,
-                                      ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-                                      &cccd_val,
-                                      NULL);
-
+        if(gl_profile_tab[PROFILE_UART_APP_ID].char_count == 0)
+        {
+            esp_bt_uuid_t descr_uuid = {
+                .len = ESP_UUID_LEN_16,
+                .uuid = { .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG },
+            };
+        
+            esp_attr_value_t cccd_val = {
+                .attr_max_len = 2,
+                .attr_len = 2,
+                .attr_value = (uint8_t[]){0x00, 0x00},
+            };
+        
+            esp_ble_gatts_add_char_descr( gl_profile_tab[PROFILE_UART_APP_ID].service_handle,
+                                          &descr_uuid,
+                                          ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+                                          &cccd_val,
+                                          NULL);
+        }
         break;
 
     case ESP_GATTS_ADD_CHAR_DESCR_EVT:
-
         gl_profile_tab[PROFILE_UART_APP_ID].descr_handle = param->add_char_descr.attr_handle;
-        ESP_LOGI(GATTS_TAG, "ADD_DESCR_EVT, handle = %d", param->add_char_descr.attr_handle);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_ADD_CHAR_DESCR_EVT, handle = %d", param->add_char_descr.attr_handle);
         
         break;
 
     case ESP_GATTS_START_EVT:
-        // ESP_LOGI(GATTS_TAG, "SERVICE_START_EVT, status %d, service_handle %d\n",
-                //  param->start.status, param->start.service_handle);
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_START_EVT, status %d, service_handle %d\n",
+                 param->start.status, param->start.service_handle);
         break;
 
     case ESP_GATTS_WRITE_EVT:
-        ESP_LOGI(GATTS_TAG, "UART WRITE_EVT");
+        if(param->write.len > 0)
+        {
+            ESP_LOGI(GATTS_TAG, "Received data:");
+            ESP_LOG_BUFFER_HEX(GATTS_TAG, param->write.value, param->write.len);
+        }
         if (!param->write.is_prep)
         {
-            if(param->write.len > 0)
+            if (gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle == param->write.handle && param->write.len == 2)
             {
-                ESP_LOGI(GATTS_TAG, "Received data:");
-                ESP_LOG_BUFFER_HEX(GATTS_TAG, param->write.value, param->write.len);
-                parse_command( param->write.value, param->write.len , "cmd");
-                if((blecmd < 1) || (blecmd >= MAX_BLE_CMDS)){
-                    uart_cmd_handler_flag = false;
+                uint16_t descr_value = param->write.value[1] << 8 | param->write.value[0];
+                if (descr_value == 0x0001)
+                {
+                    if (a_property & ESP_GATT_CHAR_PROP_BIT_NOTIFY)
+                    {
+                        ESP_LOGI(GATTS_TAG, "notify enable");
+                        uint8_t notify_data[15];
+                        for (int i = 0; i < sizeof(notify_data); ++i)
+                        {
+                            notify_data[i] = i % 0xff;
+                        }
+                        // the size of notify_data[] need less than MTU size
+                        esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0],
+                                                    sizeof(notify_data), notify_data, false);
+                    }
+                }
+                else if (descr_value == 0x0002)
+                {
+                    if (a_property & ESP_GATT_CHAR_PROP_BIT_INDICATE)
+                    {
+                        ESP_LOGI(GATTS_TAG, "indicate enable");
+                        uint8_t indicate_data[15];
+                        for (int i = 0; i < sizeof(indicate_data); ++i)
+                        {
+                            indicate_data[i] = i % 0xff;
+                        }
+                        // the size of indicate_data[] need less than MTU size
+                        esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id, gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0],
+                                                    sizeof(indicate_data), indicate_data, true);
+                    }
+                }
+                else if (descr_value == 0x0000)
+                {
+                    ESP_LOGI(GATTS_TAG, "notify/indicate disable ");
                 }
                 else
                 {
-                    uart_cmd_handler_flag = true;
+                    ESP_LOGE(GATTS_TAG, "unknown descr value");
                 }
-    
-                // ESP_LOGI(GATTS_TAG, "cmd : %s", property , property_JSON->valuestring);
-    
-    
-                // esp_ble_gatts_send_indicate(gatts_if, param->write.conn_id,
-                //                             gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
-                //                             param->write.len, param->write.value, false);
             }
-
         }
         write_event_env(gatts_if, &a_prepare_write_env, param);
 
         break;
 
     case ESP_GATTS_EXEC_WRITE_EVT:
-
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
-         esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-        //  exec_write_event_env(&a_prepare_write_env, param);
-         uart_exec_write_event_env(&a_prepare_write_env,param);
-        
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
+        esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
+        exec_write_event_env(&a_prepare_write_env, param);
         break;
 
     case ESP_GATTS_CONNECT_EVT:
@@ -523,7 +495,7 @@ void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
         conn_params.max_int = 0x20; // max_int = 0x20*1.25ms = 40ms
         conn_params.min_int = 0x10; // min_int = 0x10*1.25ms = 20ms
         conn_params.timeout = 400;  // timeout = 400*10ms = 4000ms
-        ESP_LOGI(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
+        ESP_LOGD(GATTS_TAG, "ESP_GATTS_CONNECT_EVT, conn_id %d, remote %02x:%02x:%02x:%02x:%02x:%02x:",
                  param->connect.conn_id,
                  param->connect.remote_bda[0], param->connect.remote_bda[1], param->connect.remote_bda[2],
                  param->connect.remote_bda[3], param->connect.remote_bda[4], param->connect.remote_bda[5]);
@@ -531,11 +503,6 @@ void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
         // start sent the update connection parameters to the peer device.
         esp_ble_gap_update_conn_params(&conn_params);
         gl_profile_tab[PROFILE_UART_APP_ID].conn_id = param->connect.conn_id;
-        break;
-
-    case ESP_GATTS_DISCONNECT_EVT:
-        ESP_LOGI(GATTS_TAG, "DEVICE DISCONNECTED");
-        esp_ble_gap_start_advertising(&adv_params);
         break;
 
     default:

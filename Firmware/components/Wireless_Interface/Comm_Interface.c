@@ -3,9 +3,9 @@
 
 #define TAG "COMM_INTERFACE"
 
-bool uart_cmd_handler_flag = false;
 BLE_COMMANDS blecmd;
 char* bleParameters[2] = {NULL, NULL};
+bool uart_cmd_handler_flag = false;
 
 char *cmdStringFetch[]  = {
     "NoCommand",
@@ -128,7 +128,7 @@ void start_ble(void)
     adv_config_done |= scan_rsp_config_flag;
 #endif
 
-    esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(500);
+    esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(517);
     if (local_mtu_ret)
     {
         ESP_LOGE(GATTS_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
@@ -246,6 +246,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
 
 // uint8_t parse_command(uint8_t *data, int len , const char *property)
 // {
+//     ESP_LOGI(GATTS_TAG, "Received data with len: %d", len);
 //     char json_str[len + 1]; // Create a buffer with space for null terminator
 //     memcpy(json_str, data, len);
 //     json_str[len] = '\0'; // Ensure null termination
@@ -353,7 +354,7 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
     
     esp_err_t err = esp_ble_gatts_send_indicate(gl_profile_tab[PROFILE_UART_APP_ID].gatts_if,
                                                 gl_profile_tab[PROFILE_UART_APP_ID].conn_id,
-                                                gl_profile_tab[PROFILE_UART_APP_ID].char1_handle,
+                                                gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1],
                                                 sizeof(resp), resp, false);
     if (err != ESP_OK)
     {

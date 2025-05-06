@@ -34,6 +34,8 @@ extern const uint8_t prov_chr_uuid[16];
 extern esp_ble_adv_data_t adv_data;
 extern esp_ble_adv_data_t scan_rsp_data;
 
+extern uint16_t temp_char_handle;
+
 extern uint8_t adv_config_done;
 
 extern BLE_COMMANDS blecmd;
@@ -47,9 +49,13 @@ struct gatts_profile_inst
 
     uint16_t service_handle;
     esp_gatt_srvc_id_t service_id;
-    uint16_t char_handle;
+    uint16_t char_count;
+    uint16_t char_handle[2];
+    // esp_bt_uuid_t char_uuid[2];
+
+    // uint16_t char_handle;
     esp_bt_uuid_t char_uuid;
-    uint16_t char1_handle;
+    // uint16_t char1_handle;
     esp_bt_uuid_t char1_uuid;
 
 
@@ -66,21 +72,14 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
 void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
 void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
 
-uint8_t parse_command(uint8_t *data, int len , const char *property);
-void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len);
-
-// void start_ble_provisioning(void);
-void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
-// void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-// void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
-// void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-// void gatts_prov_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
-
 void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
-void parse_ble_write_data(uint8_t *data, int len);
+// void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 
-char * parse_JSON(uint8_t *data, int len , const char *property);
+uint8_t parse_command(uint8_t *data, int len , const char *property);
+void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len);
+// void parse_ble_write_data(uint8_t *data, int len);
+// char * parse_JSON(uint8_t *data, int len , const char *property);
 
 
 // WiFi
