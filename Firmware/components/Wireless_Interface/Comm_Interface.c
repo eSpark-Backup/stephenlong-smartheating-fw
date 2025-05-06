@@ -19,6 +19,20 @@ char *cmdStringFetch[]  = {
     "setRelays",
 };
 
+void ble_command_task(void * pvParameters)
+{
+    while(1)
+    {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        
+        if(uart_cmd_handler_flag)
+        {
+            execute_command();
+        }
+    }
+    vTaskDelete( NULL );
+}
+
 void comm_init(void)
 {
     /* Initialize networking stack */
@@ -32,6 +46,15 @@ void comm_init(void)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     start_ble();
+
+    // Create the task for the IR sensor
+    if(xTaskCreate(ble_command_task, "ble_command_task", 2048, NULL, 1, NULL) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create IR sensor task");
+        set_device_status(1, ERROR);
+        return;
+    }
+    ESP_LOGD(TAG, "ble_command_task created successfully");
 }
 
 void start_ble(void)
@@ -236,6 +259,15 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     default:
         blecmd = NO_COMMAND;
         break;
+    }
+
+    if((blecmd < 1) || (blecmd >= MAX_BLE_CMDS))
+    {
+        uart_cmd_handler_flag = false;
+    }
+    else
+    {
+        uart_cmd_handler_flag = true;
     }
 
     ESP_LOGD(GATTS_TAG, "Command received: %s",

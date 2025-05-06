@@ -126,3 +126,4 @@ typedef struct
 
 const char* get_enum_name(ENUM_TYPE type, int value);
 void set_device_status(uint8_t op, int bitMask);
+void execute_command(void);

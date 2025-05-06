@@ -100,11 +100,11 @@ void set_led_status(void)
         SET_COLOR(state1, 255, 0, 0); // Red
         SET_COLOR(state2, 255, 0, 0); // Red
     }
-    else if (status_led_state == FIRMWARE_UPDATE) {
+    else if (status_led_state & FIRMWARE_UPDATE) {
         SET_COLOR(state1, 255, 255, 0); // Yellow
         SET_COLOR(state2, 0, 0, 0);     // Off
     }
-    else if (status_led_state == PAIRING) {
+    else if (status_led_state & PAIRING) {
         SET_COLOR(state1, 0, 0, 255); // Blue
         SET_COLOR(state2, 0, 0, 0);   // Off
     }

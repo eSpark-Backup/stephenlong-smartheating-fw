@@ -59,155 +59,65 @@ static void IRAM_ATTR button_isr_handler(void *arg)
     }
 }
 
-
-
-// uint8_t parse_command(uint8_t *data, int len , const char *property)
-// {
-//     char json_str[len + 1]; // Create a buffer with space for null terminator
-//     memcpy(json_str, data, len);
-//     json_str[len] = '\0'; // Ensure null termination
-
-//     ESP_LOGI(GATTS_TAG, "%s", json_str);
-
-//     // Extract command
-//     blecmd = (BLE_COMMANDS)(uint8_t)json_str[0];
-
-//     // Extract property value
-//     switch (blecmd)
-//     {
-//     case REBOOT:
-//     case FACTORY_RESET:
-//     case READ_INTERNAL_TEMP:
-//     case READ_TEMP:
-//     case READ_RELAY_STATE:
-//         // No parameters needed for these commands and if any, command is discarded.
-//         blecmd = (len > 1) ? NO_COMMAND : blecmd;
-//         break;
-
-//     case WIFI_UPDATE:
-//         uint8_t ssid_len = (uint8_t)(json_str[1]);
-//         char* ssid = (char*)(malloc(ssid_len + 1));
-//         if (!ssid) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for SSID!\n");
-//             return 0;
-//         }
-//         memcpy(ssid, &json_str[2], ssid_len);
-//         ssid[ssid_len] = '\0';
-
-//         uint8_t pwd_len = (uint8_t)(json_str[2 + ssid_len]);
-//         char* password = (char*)(malloc(pwd_len + 1));
-//         if (!password) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for Password!\n");
-//             free(ssid);
-//             return 0;
-//         }
-//         memcpy(password, &json_str[3 + ssid_len], pwd_len);
-//         password[pwd_len] = '\0';
-
-//         if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
-//             ESP_LOGE(GATTS_TAG, "WiFi credential parameters out of range.!\n");
-//             // Clean up
-//             free(ssid);
-//             free(password);
-//             return 0;
-//         }
-
-//         bleParameters[0] = ssid;
-//         bleParameters[1] = password;
-//         break;
-//     case SET_TARGET_TEMP:
-//         char* temp_h = (char*)(malloc(1));
-//         char* temp_l = (char*)(malloc(1));
-//         if (!temp_h || !temp_l) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for temprature parameters.!\n");
-//             return 0;
-//         }
-//         memcpy(temp_h, &json_str[1], 1);
-//         memcpy(temp_l, &json_str[2], 1);
-
-//         bleParameters[0] = temp_h;
-//         bleParameters[1] = temp_l;
-//         break;
-//     case SET_RELAYS:
-//         char* relay_state = (char*)(malloc(1));
-//         if (!relay_state) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for relay state parameter.!\n");
-//             return 0;
-//         }
-//         memcpy(relay_state, &json_str[1], 1);
-//         bleParameters[0] = relay_state;
-//         break;
+void execute_command(void)
+{
+    ESP_LOGD(DEVICE_TAG, "Executing command.");
+    switch (blecmd)
+    {
+    case WIFI_UPDATE:
+        ESP_LOGI(GATTS_TAG, "Updating WiFi credentials...");
+        send_ble_uart_notification(save_wifi_credentials(bleParameters[0], bleParameters[1]), NULL, 0);
+        ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        esp_restart();
+        break;
+    case REBOOT:
+        ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        send_ble_uart_notification(ESP_OK, NULL, 0);
+        esp_restart();
+        break;
+    case FACTORY_RESET:
+        ESP_LOGW(GATTS_TAG, "Performing application reset...");
+        send_ble_uart_notification(reset_device_and_erase_nvs(), NULL, 0);
+        esp_restart();
+        break;
+    case READ_INTERNAL_TEMP:
+        ESP_LOGI(GATTS_TAG, "Reading internal temperature...");
+        float tempInternal = get_ambient_temp();
+        send_ble_uart_notification(ESP_FAIL, (uint8_t*)&tempInternal, sizeof(tempInternal));
+        break;
+    case READ_TEMP:
+        ESP_LOGI(GATTS_TAG, "Reading external temperature...");
+        float tempObject = get_object_temp();
+        send_ble_uart_notification(ESP_OK, (uint8_t*)&tempObject, sizeof(tempObject));
+        break;
+    case READ_RELAY_STATE:
+        ESP_LOGI(GATTS_TAG, "Reading relay state...");
+        HEATER_STATE relayState = get_heater_state();
+        send_ble_uart_notification(ESP_OK, (uint8_t*)&relayState, sizeof(relayState));
+        break;
+    case SET_TARGET_TEMP:
+        ESP_LOGI(GATTS_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
+        float targetTemp = (float)(*(uint8_t*)bleParameters[0]) + ((float)(*(uint8_t*)bleParameters[1]) / 100.0f);
+        set_heater_temp(targetTemp);
+        send_ble_uart_notification(ESP_OK, NULL, 0);
+        break;
+    case SET_RELAYS:
+        ESP_LOGI(GATTS_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
+        esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
+        send_ble_uart_notification(err, NULL, 0);
+        break;
     
-//     default:
-//         break;
-//     }
-
-//     ESP_LOGD(GATTS_TAG, "Command received: %s",
-//             ((blecmd >= NO_COMMAND) && (blecmd < MAX_BLE_CMDS)) ? cmdStringFetch[blecmd] : cmdStringFetch[0]);
-
-//     return blecmd;
-// }
-
-
-
-// void execute_command(void)
-// {
-//     switch (blecmd)
-//     {
-//     case WIFI_UPDATE:
-//         ESP_LOGI(GATTS_TAG, "Updating WiFi credentials...");
-//         send_ble_uart_notification(save_wifi_credentials(bleParameters[0], bleParameters[1]), NULL, 0);
-//         ESP_LOGW(GATTS_TAG, "Rebooting device...");
-//         esp_restart();
-//         break;
-//     case REBOOT:
-//         ESP_LOGW(GATTS_TAG, "Rebooting device...");
-//         send_ble_uart_notification(ESP_OK, NULL, 0);
-//         esp_restart();
-//         break;
-//     case FACTORY_RESET:
-//         ESP_LOGW(GATTS_TAG, "Performing application reset...");
-//         send_ble_uart_notification(reset_device_and_erase_nvs(), NULL, 0);
-//         esp_restart();
-//         break;
-//     case READ_INTERNAL_TEMP:
-//         ESP_LOGI(GATTS_TAG, "Reading internal temperature...");
-//         float tempInternal = get_ambient_temp();
-//         send_ble_uart_notification(ESP_FAIL, (uint8_t*)&tempInternal, sizeof(tempInternal));
-//         break;
-//     case READ_TEMP:
-//         ESP_LOGI(GATTS_TAG, "Reading external temperature...");
-//         float tempObject = get_object_temp();
-//         send_ble_uart_notification(ESP_OK, (uint8_t*)&tempObject, sizeof(tempObject));
-//         break;
-//     case READ_RELAY_STATE:
-//         ESP_LOGI(GATTS_TAG, "Reading relay state...");
-//         HEATER_STATE relayState = get_heater_state();
-//         send_ble_uart_notification(ESP_OK, (uint8_t*)&relayState, sizeof(relayState));
-//         break;
-//     case SET_TARGET_TEMP:
-//         ESP_LOGI(GATTS_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
-//         float targetTemp = (float)(*(uint8_t*)bleParameters[0]) + ((float)(*(uint8_t*)bleParameters[1]) / 100.0f);
-//         set_heater_target_temp(targetTemp);
-//         send_ble_uart_notification(ESP_OK, NULL, 0);
-//         break;
-//     case SET_RELAYS:
-//         ESP_LOGI(GATTS_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
-//         esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
-//         send_ble_uart_notification(err, NULL, 0);
-//         break;
-    
-//     default:
-//         ESP_LOGE(GATTS_TAG, "Invalid command received: %X", blecmd);
-//         break;
-//     }
-//     free(bleParameters[0]);
-//     free(bleParameters[1]);
-//     bleParameters[0] = NULL;
-//     bleParameters[1] = NULL;
-//     blecmd = NO_COMMAND;
-//     uart_cmd_handler_flag = false;
-// }
+    default:
+        ESP_LOGE(GATTS_TAG, "Invalid command received: %X", blecmd);
+        break;
+    }
+    free(bleParameters[0]);
+    free(bleParameters[1]);
+    bleParameters[0] = NULL;
+    bleParameters[1] = NULL;
+    blecmd = NO_COMMAND;
+    uart_cmd_handler_flag = false;
+}
 
 
 void button_init(void)
@@ -229,12 +139,12 @@ void button_init(void)
 
 void app_main(void)
 {
-    // status_led_init();
+    status_led_init();
     device_data_init();
-    // button_init();
+    button_init();
 
-    // ir_sensor_init();
-    // heater_interface_init();
+    ir_sensor_init();
+    heater_interface_init();
 
     // set_heater_temp(27.5);
     // set_heater_mode(AUTO_MODE);
@@ -254,18 +164,6 @@ void app_main(void)
         ESP_LOGI(WIFI_TAG, "Starting BLE for provisioning");
         // start_ble_provisioning();
     }
-
-    // while(1)
-    // {
-    //     // if(gpio_isr_handler_flag == true){
-    //     //     start_softap_provisioning();
-    //     // }
-    //     if(uart_cmd_handler_flag)
-    //     {
-    //         execute_command();
-    //     }
-    //     vTaskDelay(pdMS_TO_TICKS(500));  // Delay for 1 second
-    // }
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)

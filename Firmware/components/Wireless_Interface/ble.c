@@ -394,7 +394,7 @@ void gatts_uart_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if
 
         ESP_LOGD(GATTS_TAG, "ESP_GATTS_ADD_CHAR_EVT UART PROFILE, attr_handle = %d", param->add_char.attr_handle);
         
-        if(gl_profile_tab[PROFILE_UART_APP_ID].char_count == 0)
+        if(gl_profile_tab[PROFILE_UART_APP_ID].char_count == 1)
         {
             esp_bt_uuid_t descr_uuid = {
                 .len = ESP_UUID_LEN_16,

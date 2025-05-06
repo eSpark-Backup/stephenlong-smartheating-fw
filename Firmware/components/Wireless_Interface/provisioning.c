@@ -23,6 +23,8 @@ void start_softap_provisioning(void)
 
     ESP_LOGI(TAG WIFI_TAG, "SoftAP mode started. Go to http://192.168.4.1/");
     start_webserver();
+
+    set_device_status(1, PAIRING);
 }
 
 httpd_handle_t start_webserver(void)
@@ -111,6 +113,7 @@ void event_handler(void *arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
         esp_wifi_connect();
+        // set_device_status(1, PAIRING);
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
@@ -132,6 +135,8 @@ void event_handler(void *arg, esp_event_base_t event_base,
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG WIFI_TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
+
+        set_device_status(0, PAIRING);
     }
 }
 

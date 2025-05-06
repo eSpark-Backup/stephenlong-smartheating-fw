@@ -12,26 +12,38 @@ Company identifier according to [SIG specifications](https://www.bluetooth.com/w
 | Herschel Infrared Ltd. | 0x0EC3 | 
 
 ---
-## Primary UART Service
+## Primary Services
+
+- **Service Name:** Herschel WiFI Provision service (custom)
+- **Service UUID:** `7E40007E-B5A3-1000-<COMPANY IDENTIFIER>-E50E24DCCA9E`
 
 - **Service Name:** Herschel UART service (custom)
-- **Service UUID:** `7E400001-B5A3-F393-<COMPANY IDENTIFIER>-E50E24DCCA9E`
+- **Service UUID:** `7E40007E-B5A3-2000-<COMPANY IDENTIFIER>-E50E24DCCA9E`
 
 ---
 
-## Characteristic: Receive
+## Characteristic: 
 
-- **UUID:** `7E400003-B5A3-F393-<COMPANY IDENTIFIER>-E50E24DCCA9E`
+### WiFi Provsion
+
+- **UUID:** `7E40007E-B5A3-1001-<COMPANY IDENTIFIER>-E50E24DCCA9E`
+- **Properties:** `Write`
+- **Data Format:**
+  - WiFi credential command as described in section "BLE COMMANDS"
+- **Description:** Used to save wifi credentials to the device over BLE.
+
+### Receive
+
+- **UUID:** `7E40007E-B5A3-2001-<COMPANY IDENTIFIER>-E50E24DCCA9E`
 - **Properties:** `Write`
 - **Data Format:**
   - Commands as described in section "BLE COMMANDS"
 - **Description:** Used to issue command to the device over BLE.
 
----
 
-## Characteristic: Transmit
+### Transmit
 
-- **UUID:** `7E400002-B5A3-F393-<COMPANY IDENTIFIER>-E50E24DCCA9E`
+- **UUID:** `7E40007E-B5A3-2002-<COMPANY IDENTIFIER>-E50E24DCCA9E`
 - **Properties:** `Notify`
 - **Data Format:**
   - Commands response as described in section "BLE COMMANDS"
@@ -58,7 +70,7 @@ Hex Code | Command | Type | Input | Response Format
 ## Connection Behavior
 
 - **Peripheral Role:** Advertises service on startup
-- **MTU Size:** 500 bytes (negotiable)
+- **MTU Size:** 517 bytes (negotiable)
 - **Preferred Connection Interval:** 7.5–20 ms
 
 ---

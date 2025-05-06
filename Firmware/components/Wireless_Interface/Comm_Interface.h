@@ -19,8 +19,9 @@
 
 extern uint8_t adv_config_done;
 
-extern bool uart_cmd_handler_flag;
 extern prepare_type_env_t a_prepare_write_env;
+
+void ble_command_task(void * pvParameters);
 
 void comm_init(void);
 void start_ble(void);
@@ -39,6 +40,8 @@ extern uint16_t temp_char_handle;
 extern uint8_t adv_config_done;
 
 extern BLE_COMMANDS blecmd;
+extern bool uart_cmd_handler_flag;
+extern char* bleParameters[2];
 
 struct gatts_profile_inst
 {
