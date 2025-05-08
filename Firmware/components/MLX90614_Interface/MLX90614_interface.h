@@ -23,9 +23,11 @@ typedef struct {
 // void ir_sensor_task(void * pvParameters);
 
 esp_err_t ir_sensor_init(void);
+void internal_temp_sensor_init(void);
 float get_operative_temp(void);
 float get_ambient_temp(void);
 float get_object_temp(void);
+float get_internal_temp(void);
 
 void CircularBuffer_Init(circular_buffer_t* cb);
 bool CircularBuffer_IsFull(circular_buffer_t* cb);

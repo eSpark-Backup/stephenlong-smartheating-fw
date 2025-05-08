@@ -3,6 +3,12 @@
 
 #define TAG "COMM_INTERFACE"
 
+#define CHECK_PROPERTY(property)                \
+    if(!property) {                           \
+        blecmd = NO_COMMAND;                    \
+        break;                                  \
+    }
+
 BLE_COMMANDS blecmd;
 char* bleParameters[2] = {NULL, NULL};
 bool uart_cmd_handler_flag = false;
@@ -18,6 +24,7 @@ char *cmdStringFetch[]  = {
     "readRelayState",
     "setRelays",
     "setDeviceMode",
+    "readPresence",
 };
 
 void ble_command_task(void * pvParameters)
@@ -165,14 +172,15 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     memcpy(packet, data, len);
     packet[len] = '\0'; // Ensure null termination
 
-    ESP_LOGI(GATTS_TAG, "%s", packet);
+    ESP_LOGI(TAG, "%s", packet);
 
     // Extract command
     blecmd = (BLE_COMMANDS)(uint8_t)packet[0];
 
     // Determine whether to allow command based on property
-    bool allow_all = (strcmp(property, "cmd") == 0);
-    bool allow_wifi = (strcmp(property, "wifi") == 0);
+    bool allow_all = (strcmp(property, "uart") == 0);
+    bool cmd_wifi = (strcmp(property, "wifi") == 0);
+    // bool cmd_uart = (strcmp(property, "uart") == 0);
 
     // Extract property value
     switch (blecmd)
@@ -180,44 +188,72 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     case REBOOT:
     case FACTORY_RESET:
     case READ_INTERNAL_TEMP:
-    case READ_TEMP:
     case READ_RELAY_STATE:
+    case READ_PRESENCE:
         if (!allow_all || len > 1) {
             blecmd = NO_COMMAND;
         }
         break;
 
-    case WIFI_UPDATE:
-        if (!allow_wifi && !allow_all) {
+    case READ_TEMP:
+        if (!allow_all) {
             blecmd = NO_COMMAND;
             break;
         }
+        // CHECK_PROPERTY(cmd_wifi);
+        // CHECK_PROPERTY(allow_all);
+
+        char* temp_type = (char*)(malloc(1));
+        if (!temp_type) {
+            ESP_LOGE(TAG, "Memory allocation failed for temperature type parameter.!\n");
+            return 0;
+        }
+
+        if(len > 1)
+        {
+            memcpy(temp_type, &packet[1], 1);
+        }
+        else
+        {
+            *temp_type = 0x00;
+        }
+        
+        bleParameters[0] = temp_type;
+        break;
+
+    case WIFI_UPDATE:
+        if (!cmd_wifi && !allow_all) {
+            blecmd = NO_COMMAND;
+            break;
+        }
+        // CHECK_PROPERTY(cmd_wifi);
+        // CHECK_PROPERTY(allow_all);
 
         uint8_t ssid_len = (uint8_t)(packet[1]);
+        uint8_t pwd_len = (uint8_t)(packet[2 + ssid_len]);
+        if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
+            ESP_LOGE(TAG, "WiFi credential parameters out of range.!\n");
+            // free(ssid);
+            // free(password);
+            return 0;
+        }
+
         char* ssid = (char*)(malloc(ssid_len + 1));
         if (!ssid) {
-            ESP_LOGE(GATTS_TAG, "Memory allocation failed for SSID!\n");
+            ESP_LOGE(TAG, "Memory allocation failed for SSID!\n");
             return 0;
         }
         memcpy(ssid, &packet[2], ssid_len);
         ssid[ssid_len] = '\0';
 
-        uint8_t pwd_len = (uint8_t)(packet[2 + ssid_len]);
         char* password = (char*)(malloc(pwd_len + 1));
         if (!password) {
-            ESP_LOGE(GATTS_TAG, "Memory allocation failed for Password!\n");
+            ESP_LOGE(TAG, "Memory allocation failed for Password!\n");
             free(ssid);
             return 0;
         }
         memcpy(password, &packet[3 + ssid_len], pwd_len);
         password[pwd_len] = '\0';
-
-        if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
-            ESP_LOGE(GATTS_TAG, "WiFi credential parameters out of range.!\n");
-            free(ssid);
-            free(password);
-            return 0;
-        }
 
         bleParameters[0] = ssid;
         bleParameters[1] = password;
@@ -228,11 +264,13 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             blecmd = NO_COMMAND;
             break;
         }
+        // CHECK_PROPERTY(cmd_uart);
+        // CHECK_PROPERTY(allow_all);
 
         char* temp_h = (char*)(malloc(1));
         char* temp_l = (char*)(malloc(1));
         if (!temp_h || !temp_l) {
-            ESP_LOGE(GATTS_TAG, "Memory allocation failed for temperature parameters.!\n");
+            ESP_LOGE(TAG, "Memory allocation failed for temperature parameters.!\n");
             return 0;
         }
         memcpy(temp_h, &packet[1], 1);
@@ -247,10 +285,12 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             blecmd = NO_COMMAND;
             break;
         }
+        // CHECK_PROPERTY(cmd_uart);
+        // CHECK_PROPERTY(allow_all);
 
         char* relay_state = (char*)(malloc(1));
         if (!relay_state) {
-            ESP_LOGE(GATTS_TAG, "Memory allocation failed for relay state parameter.!\n");
+            ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
             return 0;
         }
         memcpy(relay_state, &packet[1], 1);
@@ -262,10 +302,12 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             blecmd = NO_COMMAND;
             break;
         }
+        // CHECK_PROPERTY(cmd_uart);
+        // CHECK_PROPERTY(allow_all);
 
         char* mode = (char*)(malloc(1));
         if (!mode) {
-            ESP_LOGE(GATTS_TAG, "Memory allocation failed for relay state parameter.!\n");
+            ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
             return 0;
         }
         memcpy(mode, &packet[1], 1);
@@ -286,118 +328,30 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
         uart_cmd_handler_flag = true;
     }
 
-    ESP_LOGD(GATTS_TAG, "Command received: %s",
+    ESP_LOGD(TAG, "Command received: %s",
             ((blecmd >= NO_COMMAND) && (blecmd < MAX_BLE_CMDS)) ? cmdStringFetch[blecmd] : cmdStringFetch[0]);
 
     return blecmd;
 }
 
-// uint8_t parse_command(uint8_t *data, int len , const char *property)
-// {
-//     ESP_LOGI(GATTS_TAG, "Received data with len: %d", len);
-//     char json_str[len + 1]; // Create a buffer with space for null terminator
-//     memcpy(json_str, data, len);
-//     json_str[len] = '\0'; // Ensure null termination
-
-//     ESP_LOGI(GATTS_TAG, "%s", json_str);
-
-//     // Extract command
-//     blecmd = (BLE_COMMANDS)(uint8_t)json_str[0];
-
-//     // Extract property value
-//     switch (blecmd)
-//     {
-//     case REBOOT:
-//     case FACTORY_RESET:
-//     case READ_INTERNAL_TEMP:
-//     case READ_TEMP:
-//     case READ_RELAY_STATE:
-//         // No parameters needed for these commands and if any, command is discarded.
-//         blecmd = (len > 1) ? NO_COMMAND : blecmd;
-//         break;
-
-//     case WIFI_UPDATE:
-//         uint8_t ssid_len = (uint8_t)(json_str[1]);
-//         char* ssid = (char*)(malloc(ssid_len + 1));
-//         if (!ssid) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for SSID!\n");
-//             return 0;
-//         }
-//         memcpy(ssid, &json_str[2], ssid_len);
-//         ssid[ssid_len] = '\0';
-
-//         uint8_t pwd_len = (uint8_t)(json_str[2 + ssid_len]);
-//         char* password = (char*)(malloc(pwd_len + 1));
-//         if (!password) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for Password!\n");
-//             free(ssid);
-//             return 0;
-//         }
-//         memcpy(password, &json_str[3 + ssid_len], pwd_len);
-//         password[pwd_len] = '\0';
-
-//         if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
-//             ESP_LOGE(GATTS_TAG, "WiFi credential parameters out of range.!\n");
-//             // Clean up
-//             free(ssid);
-//             free(password);
-//             return 0;
-//         }
-
-//         bleParameters[0] = ssid;
-//         bleParameters[1] = password;
-//         break;
-//     case SET_TARGET_TEMP:
-//         char* temp_h = (char*)(malloc(1));
-//         char* temp_l = (char*)(malloc(1));
-//         if (!temp_h || !temp_l) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for temprature parameters.!\n");
-//             return 0;
-//         }
-//         memcpy(temp_h, &json_str[1], 1);
-//         memcpy(temp_l, &json_str[2], 1);
-
-//         bleParameters[0] = temp_h;
-//         bleParameters[1] = temp_l;
-//         break;
-//     case SET_RELAYS:
-//         char* relay_state = (char*)(malloc(1));
-//         if (!relay_state) {
-//             ESP_LOGE(GATTS_TAG, "Memory allocation failed for relay state parameter.!\n");
-//             return 0;
-//         }
-//         memcpy(relay_state, &json_str[1], 1);
-//         bleParameters[0] = relay_state;
-//         break;
-    
-//     default:
-//         break;
-//     }
-
-//     ESP_LOGD(GATTS_TAG, "Command received: %s",
-//             ((blecmd >= NO_COMMAND) && (blecmd < MAX_BLE_CMDS)) ? cmdStringFetch[blecmd] : cmdStringFetch[0]);
-
-//     return blecmd;
-// }
-
 void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
 {
     uint8_t resp[1 + ((len == 0) ? 1: len)];
-    ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: status %d", status);
-    ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: len %d", len);
+    ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: status %d", status);
+    ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: len %d", len);
     
     resp[0] = blecmd;
     if(data != NULL)
     {
-        ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: data %s", data);
+        ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: data %s", data);
         memcpy(&resp[1], data, len);
-        ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: resp");
-        ESP_LOG_BUFFER_HEXDUMP(GATTS_TAG, resp, len + 1, ESP_LOG_INFO);
+        ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: resp");
+        ESP_LOG_BUFFER_HEXDUMP(TAG GATTS_TAG, resp, len + 1, ESP_LOG_INFO);
     }
     else
     {
         resp[1] = (status == ESP_OK) ? BLE_RESPONSE_SUCCESS : BLE_RESPONSE_FAIL;
-        ESP_LOGD(GATTS_TAG, "send_ble_uart_notification: resp %02X %02X", resp[0], resp[1]);
+        ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: resp %02X %02X", resp[0], resp[1]);
     }
     
     esp_err_t err = esp_ble_gatts_send_indicate(gl_profile_tab[PROFILE_UART_APP_ID].gatts_if,
@@ -406,7 +360,7 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
                                                 sizeof(resp), resp, false);
     if (err != ESP_OK)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to send BLE notification, error code = %s", esp_err_to_name(err));
+        ESP_LOGE(TAG GATTS_TAG, "Failed to send BLE notification, error code = %s", esp_err_to_name(err));
     }
 }
 
@@ -434,7 +388,7 @@ esp_err_t load_wifi_credentials(char *ssid, char *password)
     esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READONLY, &nvs);
     if (err != ESP_OK)
     {
-        ESP_LOGE(WIFI_TAG, "No saved credentials found");
+        ESP_LOGE(TAG WIFI_TAG, "No saved credentials found");
         return err;
     }
 
@@ -451,7 +405,7 @@ esp_err_t save_wifi_credentials(const char *ssid, const char *password)
     esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READWRITE, &nvs);
     if (err != ESP_OK)
     {
-        ESP_LOGE(WIFI_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG WIFI_TAG, "Error opening NVS: %s", esp_err_to_name(err));
         return err;
     }
 
@@ -459,6 +413,6 @@ esp_err_t save_wifi_credentials(const char *ssid, const char *password)
     nvs_set_str(nvs, "password", password);
     nvs_commit(nvs);
     nvs_close(nvs);
-    ESP_LOGI(WIFI_TAG, "WiFi credentials saved");
+    ESP_LOGI(TAG WIFI_TAG, "WiFi credentials saved");
     return ESP_OK;
 }

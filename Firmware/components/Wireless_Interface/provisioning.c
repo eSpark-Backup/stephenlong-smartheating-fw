@@ -200,17 +200,10 @@ void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_e
 
         if(!param->write.is_prep)
         {
-            // ESP_LOGI(GATTS_TAG, "param->write.conn_id %d", param->write.conn_id);
-            // ESP_LOGI(GATTS_TAG, "param->write.handle %d", param->write.handle);
-            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_UART_APP_ID].descr_handle);
-            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle);
-            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] );
-            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] );
-            // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] );
             if ( param->write.handle == gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0])
             {
-                ESP_LOGD(GATTS_TAG, "calling 'cmd'");
-                parse_command( param->write.value, param->write.len , "cmd");
+                ESP_LOGD(GATTS_TAG, "calling 'uart'");
+                parse_command( param->write.value, param->write.len , "uart");
             }
             else if ( param->write.handle == gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0])
             {
@@ -225,18 +218,10 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
 {
     if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
     {
-        // ESP_LOGI(GATTS_TAG, "param->write.conn_id %d", param->write.conn_id);
-        // ESP_LOGI(GATTS_TAG, "param->write.handle %d", param->write.handle);
-        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_UART_APP_ID].descr_handle);
-        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle %d", gl_profile_tab[PROFILE_PROV_APP_ID].descr_handle);
-        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0] );
-        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] %d", gl_profile_tab[PROFILE_UART_APP_ID].char_handle[1] );
-        // ESP_LOGI(GATTS_TAG, "gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] %d", gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0] );
         if ( temp_char_handle == gl_profile_tab[PROFILE_UART_APP_ID].char_handle[0])
-        // if (param->write.conn_id == gl_profile_tab[PROFILE_UART_APP_ID].conn_id)
         {
-            ESP_LOGD(GATTS_TAG, "calling 'cmd'");
-            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "cmd");
+            ESP_LOGD(GATTS_TAG, "calling 'uart'");
+            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "uart");
         }
         else if ( temp_char_handle == gl_profile_tab[PROFILE_PROV_APP_ID].char_handle[0])
         {

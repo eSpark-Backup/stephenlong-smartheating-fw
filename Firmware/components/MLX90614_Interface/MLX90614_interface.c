@@ -1,6 +1,7 @@
 #include "MLX90614_interface.h"
 #include "MLX90614_SMBus_Driver.h"
 #include "MLX90614_API.h"
+#include "driver/temperature_sensor.h"
 #include "freertos/freertos.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -28,6 +29,7 @@
 
 DEVICE_STATUS* _device_status = NULL; // Pointer to device status
 circular_buffer_t dataBufferTa, dataBufferTo;            // circular buffer for Tambient and Tobject data
+temperature_sensor_handle_t temp_sensor = NULL;
 
 void ir_sensor_task(void * pvParameters)
 {
@@ -60,6 +62,7 @@ esp_err_t ir_sensor_init(void)
     CircularBuffer_Init(&dataBufferTo);
 
     MLX90614_SMBusInit(MLX90614_SDA_IO, MLX90614_SCL_IO, MLX90614_FREQ, MLX90614_I2C_NUM);
+    internal_temp_sensor_init();
 
     // Create the task for the IR sensor
     if(xTaskCreate(ir_sensor_task, "IR_Sensor_Task", 2048, NULL, 1, NULL) != pdPASS)
@@ -71,6 +74,14 @@ esp_err_t ir_sensor_init(void)
     ESP_LOGD(TAG, "IR sensor task created successfully");
 
     return ESP_OK;
+}
+
+void internal_temp_sensor_init(void)
+{
+    temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(10, 50);
+    temperature_sensor_install(&temp_sensor_config, &temp_sensor);
+
+    temperature_sensor_enable(temp_sensor);
 }
 
 float get_operative_temp(void)
@@ -109,6 +120,14 @@ float get_object_temp(void)
     ESP_LOGD(TAG, "Ta: %.2f", To);
 
     return To;
+}
+
+float get_internal_temp(void)
+{
+    float internal_temp = 0;
+    temperature_sensor_get_celsius(temp_sensor, &internal_temp);
+    ESP_LOGD(DEVICE_TAG, "Internal temperature: %.2f", internal_temp);
+    return internal_temp;
 }
 
 // Initialize the buffer

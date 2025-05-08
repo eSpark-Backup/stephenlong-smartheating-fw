@@ -68,55 +68,68 @@ void execute_command(void)
     switch (blecmd)
     {
     case WIFI_UPDATE:
-        ESP_LOGI(GATTS_TAG, "Updating WiFi credentials...");
+        ESP_LOGI(DEVICE_TAG, "Updating WiFi credentials...");
         send_ble_uart_notification(save_wifi_credentials(bleParameters[0], bleParameters[1]), NULL, 0);
-        ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        ESP_LOGW(DEVICE_TAG, "Rebooting device...");
         esp_restart();
         break;
     case REBOOT:
-        ESP_LOGW(GATTS_TAG, "Rebooting device...");
+        ESP_LOGW(DEVICE_TAG, "Rebooting device...");
         send_ble_uart_notification(ESP_OK, NULL, 0);
         esp_restart();
         break;
     case FACTORY_RESET:
-        ESP_LOGW(GATTS_TAG, "Performing application reset...");
+        ESP_LOGW(DEVICE_TAG, "Performing application reset...");
         send_ble_uart_notification(reset_device_and_erase_nvs(), NULL, 0);
         esp_restart();
         break;
     case READ_INTERNAL_TEMP:
-        ESP_LOGI(GATTS_TAG, "Reading internal temperature...");
-        float tempInternal = get_ambient_temp();
+        ESP_LOGI(DEVICE_TAG, "Reading internal temperature...");
+        float tempInternal = get_internal_temp();
         send_ble_uart_notification(ESP_FAIL, (uint8_t*)&tempInternal, sizeof(tempInternal));
         break;
     case READ_TEMP:
-        ESP_LOGI(GATTS_TAG, "Reading external temperature...");
-        float tempObject = get_object_temp();
+        ESP_LOGI(DEVICE_TAG, "Reading external temperature...");
+        float tempObject = 0.0f;
+        if(*(uint8_t*)bleParameters[0])
+        {
+            tempObject = get_ambient_temp();
+        }
+        else
+        {
+            tempObject = get_object_temp();
+        }
         send_ble_uart_notification(ESP_OK, (uint8_t*)&tempObject, sizeof(tempObject));
         break;
     case READ_RELAY_STATE:
-        ESP_LOGI(GATTS_TAG, "Reading relay state...");
+        ESP_LOGI(DEVICE_TAG, "Reading relay state...");
         HEATER_STATE relayState = get_heater_state();
         send_ble_uart_notification(ESP_OK, (uint8_t*)&relayState, sizeof(relayState));
         break;
     case SET_TARGET_TEMP:
-        ESP_LOGI(GATTS_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
+        ESP_LOGI(DEVICE_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
         float targetTemp = (float)(*(uint8_t*)bleParameters[0]) + ((float)(*(uint8_t*)bleParameters[1]) / 100.0f);
         set_heater_temp(targetTemp);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     case SET_RELAYS:
-        ESP_LOGI(GATTS_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
+        ESP_LOGI(DEVICE_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
         esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(err, NULL, 0);
         break;
     case CHANGE_DEVICE_MODE:
-        ESP_LOGI(GATTS_TAG, "Setting device mode to %d", *(uint8_t*)bleParameters[0]);
+        ESP_LOGI(DEVICE_TAG, "Setting device mode to %d", *(uint8_t*)bleParameters[0]);
         set_heater_mode((DEVICE_MODE)*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
+    case READ_PRESENCE:
+        ESP_LOGI(DEVICE_TAG, "Reading presence state...");
+        uint8_t presenceState = gpio_get_level(MOTION_SENSOR_IO);
+        send_ble_uart_notification(ESP_OK, &presenceState, 1);
+        break;
     
     default:
-        ESP_LOGE(GATTS_TAG, "Invalid command received: %X", blecmd);
+        ESP_LOGE(DEVICE_TAG, "Invalid command received: %X", blecmd);
         break;
     }
     free(bleParameters[0]);
@@ -127,6 +140,20 @@ void execute_command(void)
     uart_cmd_handler_flag = false;
 }
 
+void presence_sensor_init(void)
+{
+    gpio_config_t btn_cfg = {
+        .pin_bit_mask = GPIO_PIN_MASK(MOTION_SENSOR_IO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&btn_cfg);
+
+    ESP_LOGI(GPIO_TAG, "Presence sensor initialized on GPIO %d", MOTION_SENSOR_IO);
+    
+}
 
 void button_init(void)
 {
@@ -150,6 +177,7 @@ void app_main(void)
     status_led_init();
     device_data_init();
     button_init();
+    presence_sensor_init();
 
     ir_sensor_init();
     heater_interface_init();
@@ -161,16 +189,14 @@ void app_main(void)
 
     if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
     {
-        ESP_LOGI(WIFI_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+        ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
         wifi_init_sta(device_data.ssid, device_data.password);
-        // start_ble_provisioning();
     }
     else
     {
-        ESP_LOGI(WIFI_TAG, "Starting SoftAP for provisioning");
+        ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
         start_softap_provisioning();
-        ESP_LOGI(WIFI_TAG, "Starting BLE for provisioning");
-        // start_ble_provisioning();
+        ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
     }
 }
 
