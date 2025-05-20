@@ -7,6 +7,10 @@
 #include <esp_log.h>
 #include <hal/i2c_types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define COMPANY_NAME                "HERSCHEL"
 #define COMPANY_ID                  0x0EC3
 
@@ -15,7 +19,7 @@
 #define IR_SENSOR_SDA_IO            21
 #define IR_SENSOR_SCL_IO            22
 
-#define MOTION_SENSOR_IO            23
+#define MOTION_SENSOR_IO            GPIO_NUM_23
 #define HEATER_HIGH_IO              19
 #define HEATER_LOW_IO               18
 
@@ -24,7 +28,8 @@
 #define BUTTON_PAIRMODE_THRESHOLD   5
 #define BUTTON_FACTORY_RESET        30            // seconds
 #define BUTTON_DEBOUNCE_MS          50
-#define BUTTON_GPIO                 4               // <-- Your GPIO pin
+// #define BUTTON_GPIO                 4               // <-- Your GPIO pin
+#define BUTTON_GPIO                 GPIO_NUM_4               // <-- Your GPIO pin
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
 
 #define AP_RECONN_ATTEMPTS          5
@@ -129,3 +134,8 @@ typedef struct
 const char* get_enum_name(ENUM_TYPE type, int value);
 void set_device_status(uint8_t op, int bitMask);
 void execute_command(void);
+
+
+#ifdef __cplusplus
+}
+#endif

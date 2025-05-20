@@ -14,6 +14,14 @@
 #include <lwip/err.h>
 #include <lwip/sys.h>
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+
+
 #define adv_config_flag (1 << 0)
 #define scan_rsp_config_flag (1 << 1)
 
@@ -95,3 +103,9 @@ httpd_handle_t start_webserver(void);
 esp_err_t post_handler(httpd_req_t *req);
 esp_err_t get_handler(httpd_req_t *req);
 void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
+
+
+#ifdef __cplusplus
+}
+#endif

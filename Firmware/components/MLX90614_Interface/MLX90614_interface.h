@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MLX90614_I2C_NUM    IR_SENSOR_I2C_INTERFACE
 #define MLX90614_I2C_ADDR1  IR_SENSOR_I2C_ADDR1
 #define MLX90614_I2C_ADDR2  IR_SENSOR_I2C_ADDR2
@@ -12,6 +16,8 @@
 #define MLX90614_FREQ       100000
 
 #define BUFFER_SIZE 5
+
+
 
 typedef struct {
     float buffer[BUFFER_SIZE]; // You can change `float` to whatever sensor data type you use
@@ -37,3 +43,8 @@ bool CircularBuffer_Pop(circular_buffer_t* cb, float* data);
 float CircularBuffer_Peek(circular_buffer_t* cb, int index);
 float CircularBuffer_Retrieve(circular_buffer_t* cb, float* data);
 void CircularBuffer_Print(circular_buffer_t* cb);
+
+
+#ifdef __cplusplus
+}
+#endif

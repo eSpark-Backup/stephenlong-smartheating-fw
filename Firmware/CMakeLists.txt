@@ -6,4 +6,4 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(EXTRA_COMPONENT_DIRS libraries)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(wifi_prov_esp32c6_v5.4.1)
+project(Firmware)

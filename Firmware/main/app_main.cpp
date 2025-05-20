@@ -1,3 +1,4 @@
+
 #include <string.h>
 #include <esp_wifi.h>
 #include <esp_event.h>
@@ -11,8 +12,10 @@
 #include "Heater_interface.h"
 #include "Status_led.h"
 #include "Comm_Interface.h"
-
 #include "LD2410.h"
+
+
+LD2410 ld24;
 
 static int64_t press_start_time = 0;
 static void IRAM_ATTR button_isr_handler(void *arg)
@@ -68,12 +71,14 @@ void execute_command(void)
         send_ble_uart_notification(reset_device_and_erase_nvs(), NULL, 0);
         esp_restart();
         break;
-    case READ_INTERNAL_TEMP:
+    case READ_INTERNAL_TEMP:{
         ESP_LOGI(DEVICE_TAG, "Reading internal temperature...");
         float tempInternal = get_internal_temp();
         send_ble_uart_notification(ESP_FAIL, (uint8_t*)&tempInternal, sizeof(tempInternal));
         break;
-    case READ_TEMP:
+
+    }
+    case READ_TEMP:{
         ESP_LOGI(DEVICE_TAG, "Reading external temperature...");
         float tempObject = 0.0f;
         if(*(uint8_t*)bleParameters[0])
@@ -86,33 +91,39 @@ void execute_command(void)
         }
         send_ble_uart_notification(ESP_OK, (uint8_t*)&tempObject, sizeof(tempObject));
         break;
-    case READ_RELAY_STATE:
+    }
+    case READ_RELAY_STATE:{
         ESP_LOGI(DEVICE_TAG, "Reading relay state...");
         HEATER_STATE relayState = get_heater_state();
         send_ble_uart_notification(ESP_OK, (uint8_t*)&relayState, sizeof(relayState));
         break;
-    case SET_TARGET_TEMP:
+    }
+    case SET_TARGET_TEMP:{
         ESP_LOGI(DEVICE_TAG, "Setting target temperature to %d.%d", *(uint8_t*)bleParameters[0], *(uint8_t*)bleParameters[1]);
         float targetTemp = (float)(*(uint8_t*)bleParameters[0]) + ((float)(*(uint8_t*)bleParameters[1]) / 100.0f);
         set_heater_temp(targetTemp);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
-    case SET_RELAYS:
+    }
+    case SET_RELAYS:{
         ESP_LOGI(DEVICE_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
         esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(err, NULL, 0);
         break;
-    case CHANGE_DEVICE_MODE:
+    }
+    case CHANGE_DEVICE_MODE:{
         ESP_LOGI(DEVICE_TAG, "Setting device mode to %d", *(uint8_t*)bleParameters[0]);
         set_heater_mode((DEVICE_MODE)*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
-    case READ_PRESENCE:
+
+    }
+    case READ_PRESENCE:{
         ESP_LOGI(DEVICE_TAG, "Reading presence state...");
         uint8_t presenceState = gpio_get_level(MOTION_SENSOR_IO);
         send_ble_uart_notification(ESP_OK, &presenceState, 1);
         break;
-    
+    }
     default:
         ESP_LOGE(DEVICE_TAG, "Invalid command received: %X", blecmd);
         break;
@@ -157,8 +168,9 @@ void button_init(void)
     ESP_LOGI(GPIO_TAG, "ISR set up on GPIO %d", BUTTON_GPIO);
 }
 
-void app_main(void)
+extern "C" void app_main(void)
 {
+    ld24.beginUART(GPIO_NUM_17 , GPIO_NUM_18 , 115200);
     status_led_init();
     device_data_init();
     button_init();
