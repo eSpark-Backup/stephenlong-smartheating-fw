@@ -1,27 +1,9 @@
 #include <string.h>
-// #include <freertos/FreeRTOS.h>
-// #include <freertos/task.h>
-// #include <esp_log.h>
-// #include "app_prov.h"
 #include <esp_wifi.h>
-// #include <lwip/err.h>
-// #include <lwip/sys.h>
 #include <esp_event.h>
 #include <nvs_flash.h>
 #include <esp_system.h>
-// #include <esp_http_server.h>
-
 #include "driver/gpio.h"
-
-// #include "esp_bt.h"
-// #include "cJSON.h"
-
-// #include "esp_gap_ble_api.h"
-// #include "esp_gatts_api.h"
-// #include "esp_bt_defs.h"
-// #include "esp_bt_main.h"
-// #include "esp_bt_device.h"
-// #include "esp_gatt_common_api.h"
 
 #include "defines.h"
 #include "app.h"
@@ -30,22 +12,25 @@
 #include "Status_led.h"
 #include "Comm_Interface.h"
 
-
+#include "LD2410.h"
 
 static int64_t press_start_time = 0;
 static void IRAM_ATTR button_isr_handler(void *arg)
 {
     static int64_t last_isr_time = 0;
-    int64_t now = 0;// = esp_timer_get_time(); // microseconds
+    int64_t now = esp_timer_get_time(); // microseconds
 
     // Debounce
     if (now - last_isr_time < BUTTON_DEBOUNCE_MS * 1000) return;
-    last_isr_time = now;
+        last_isr_time = now;
 
-    if (gpio_get_level(BUTTON_GPIO) == 0) {
+    if (gpio_get_level(BUTTON_GPIO) == 0)
+    {
         // Button pressed (falling edge)
         press_start_time = now;
-    } else {
+    }
+    else
+    {
         // Button released (rising edge)
         int64_t press_duration = now - press_start_time;
 
@@ -250,4 +235,3 @@ const char* get_enum_name(ENUM_TYPE type, int value)
             return "UNKNOWN_ENUM_TYPE";
     }
 }
-
