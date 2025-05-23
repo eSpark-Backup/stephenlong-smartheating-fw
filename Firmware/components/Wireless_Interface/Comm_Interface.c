@@ -11,6 +11,12 @@
 
 BLE_COMMANDS blecmd;
 char* bleParameters[2] = {NULL, NULL};
+char *numberOfGates= NULL;
+
+GateParameters* gateParams = NULL;
+
+
+
 bool uart_cmd_handler_flag = false;
 
 char *cmdStringFetch[]  = {
@@ -25,6 +31,9 @@ char *cmdStringFetch[]  = {
     "setRelays",
     "setDeviceMode",
     "readPresence",
+    "setDetectionRange",
+    "setGateSensitivity",
+    "setDetectionDuration"
 };
 
 void ble_command_task(void * pvParameters)
@@ -35,6 +44,7 @@ void ble_command_task(void * pvParameters)
         
         if(uart_cmd_handler_flag)
         {
+            printf("EXECUTING COMMAND\n");
             execute_command();
         }
     }
@@ -56,7 +66,7 @@ void comm_init(void)
     start_ble();
 
     // Create the task for the IR sensor
-    if(xTaskCreate(ble_command_task, "ble_command_task", 2048, NULL, 1, NULL) != pdPASS)
+    if(xTaskCreate(ble_command_task, "ble_command_task", 4096, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
         set_device_status(1, ERROR);
@@ -183,141 +193,203 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     // bool cmd_uart = (strcmp(property, "uart") == 0);
 
     // Extract property value
-    switch (blecmd)
-    {
-    case REBOOT:
-    case FACTORY_RESET:
-    case READ_INTERNAL_TEMP:
-    case READ_RELAY_STATE:
-    case READ_PRESENCE:
-        if (!allow_all || len > 1) {
-            blecmd = NO_COMMAND;
-        }
-        break;
+    switch (blecmd){
 
-    case READ_TEMP:
-        if (!allow_all) {
-            blecmd = NO_COMMAND;
+
+        case REBOOT:
+        case FACTORY_RESET:
+        case READ_INTERNAL_TEMP:
+        case READ_RELAY_STATE:
+        case READ_PRESENCE:
+            if (!allow_all || len > 1) {
+                blecmd = NO_COMMAND;
+            }
             break;
-        }
-        // CHECK_PROPERTY(cmd_wifi);
-        // CHECK_PROPERTY(allow_all);
+    
+        case READ_TEMP:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            // CHECK_PROPERTY(cmd_wifi);
+            // CHECK_PROPERTY(allow_all);
+    
+            char* temp_type = (char*)(malloc(1));
+            if (!temp_type) {
+                ESP_LOGE(TAG, "Memory allocation failed for temperature type parameter.!\n");
+                return 0;
+            }
+    
+            if(len > 1)
+            {
+                memcpy(temp_type, &packet[1], 1);
+            }
+            else
+            {
+                *temp_type = 0x00;
+            }
+            
+            bleParameters[0] = temp_type;
+            break;
+    
+        case WIFI_UPDATE:
+            if (!cmd_wifi && !allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            // CHECK_PROPERTY(cmd_wifi);
+            // CHECK_PROPERTY(allow_all);
+    
+            uint8_t ssid_len = (uint8_t)(packet[1]);
+            uint8_t pwd_len = (uint8_t)(packet[2 + ssid_len]);
+            if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
+                ESP_LOGE(TAG, "WiFi credential parameters out of range.!\n");
+                // free(ssid);
+                // free(password);
+                return 0;
+            }
+    
+            char* ssid = (char*)(malloc(ssid_len + 1));
+            if (!ssid) {
+                ESP_LOGE(TAG, "Memory allocation failed for SSID!\n");
+                return 0;
+            }
+            memcpy(ssid, &packet[2], ssid_len);
+            ssid[ssid_len] = '\0';
+    
+            char* password = (char*)(malloc(pwd_len + 1));
+            if (!password) {
+                ESP_LOGE(TAG, "Memory allocation failed for Password!\n");
+                free(ssid);
+                return 0;
+            }
+            memcpy(password, &packet[3 + ssid_len], pwd_len);
+            password[pwd_len] = '\0';
+    
+            bleParameters[0] = ssid;
+            bleParameters[1] = password;
+            break;
+    
+        case SET_TARGET_TEMP:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            // CHECK_PROPERTY(cmd_uart);
+            // CHECK_PROPERTY(allow_all);
+    
+            char* temp_h = (char*)(malloc(1));
+            char* temp_l = (char*)(malloc(1));
+            if (!temp_h || !temp_l) {
+                ESP_LOGE(TAG, "Memory allocation failed for temperature parameters.!\n");
+                return 0;
+            }
+            memcpy(temp_h, &packet[1], 1);
+            memcpy(temp_l, &packet[2], 1);
+    
+            bleParameters[0] = temp_h;
+            bleParameters[1] = temp_l;
+            break;
+    
+        case SET_RELAYS:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            // CHECK_PROPERTY(cmd_uart);
+            // CHECK_PROPERTY(allow_all);
+    
+            char* relay_state = (char*)(malloc(1));
+            if (!relay_state) {
+                ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
+                return 0;
+            }
+            memcpy(relay_state, &packet[1], 1);
+            bleParameters[0] = relay_state;
+            break;
+    
+        case CHANGE_DEVICE_MODE:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            // CHECK_PROPERTY(cmd_uart);
+            // CHECK_PROPERTY(allow_all);
+    
+            char* mode = (char*)(malloc(1));
+            if (!mode) {
+                ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
+                return 0;
+            }
+            memcpy(mode, &packet[1], 1);
+            bleParameters[0] = mode;
+            break;
+            
+        case SET_DETECTION_RANGE:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            char* range = (char*)(malloc(1));
+            if (!range) {
+                ESP_LOGE(TAG, "Memory allocation failed for detection range parameter.!\n");
+                return 0;
+            }               
+            memcpy(range, &packet[1], 1);
+            bleParameters[0] = range;
+            ESP_LOGE(TAG, "SET_DETECTION_RANGE!\n");
+            break;
+    
+        case SET_GATE_SENSITIVITY:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }   
+                numberOfGates = (char*)(malloc(1));
 
-        char* temp_type = (char*)(malloc(1));
-        if (!temp_type) {
-            ESP_LOGE(TAG, "Memory allocation failed for temperature type parameter.!\n");
-            return 0;
-        }
+                if (!numberOfGates) {
+                    ESP_LOGE(TAG, "Memory allocation failed for gate sensitivity parameters.!\n");
+                    return 0;
+                }
+                memcpy(numberOfGates, &packet[1], 1);
+                ESP_LOGI(TAG, "gateParamsCount : %d\n" ,*numberOfGates );
+                gateParams = malloc(sizeof(GateParameters) * (*numberOfGates));
 
-        if(len > 1)
-        {
-            memcpy(temp_type, &packet[1], 1);
-        }
-        else
-        {
-            *temp_type = 0x00;
-        }
+                for (int i = 0; i < *numberOfGates; i++) {
+   
+                        gateParams[i].gate = packet[ 2 + (i*2) ]; //2 4 6
+                        gateParams[i].value =packet[ 3 + (i*2) ]; //3 5 7
+
+                    }
+    
+                bleParameters[0] = numberOfGates;    
+                ESP_LOGE(TAG, "SET_GATE_SENSITIVITY!\n");
+             
+            break;
+    
+        case SET_DETECTION_DURATION:
+            if (!allow_all) {
+                    blecmd = NO_COMMAND;
+                    break;
+                }
+                char* duration = (char*)(malloc(1));
+                if (!duration) {
+                    ESP_LOGE(TAG, "Memory allocation failed for detection duration parameter.!\n");
+                    return 0;
+                }               
+                memcpy(duration, &packet[1], 1);
+                bleParameters[0] = duration;
+                ESP_LOGE(TAG, "SET_DETECTION_DURATION!\n");
+
+            break;
         
-        bleParameters[0] = temp_type;
-        break;
-
-    case WIFI_UPDATE:
-        if (!cmd_wifi && !allow_all) {
+    
+        default:
             blecmd = NO_COMMAND;
             break;
-        }
-        // CHECK_PROPERTY(cmd_wifi);
-        // CHECK_PROPERTY(allow_all);
-
-        uint8_t ssid_len = (uint8_t)(packet[1]);
-        uint8_t pwd_len = (uint8_t)(packet[2 + ssid_len]);
-        if ((ssid_len > WIFI_SSID_MAX_LEN) || (pwd_len > WIFI_PASS_MAX_LEN)) {
-            ESP_LOGE(TAG, "WiFi credential parameters out of range.!\n");
-            // free(ssid);
-            // free(password);
-            return 0;
-        }
-
-        char* ssid = (char*)(malloc(ssid_len + 1));
-        if (!ssid) {
-            ESP_LOGE(TAG, "Memory allocation failed for SSID!\n");
-            return 0;
-        }
-        memcpy(ssid, &packet[2], ssid_len);
-        ssid[ssid_len] = '\0';
-
-        char* password = (char*)(malloc(pwd_len + 1));
-        if (!password) {
-            ESP_LOGE(TAG, "Memory allocation failed for Password!\n");
-            free(ssid);
-            return 0;
-        }
-        memcpy(password, &packet[3 + ssid_len], pwd_len);
-        password[pwd_len] = '\0';
-
-        bleParameters[0] = ssid;
-        bleParameters[1] = password;
-        break;
-
-    case SET_TARGET_TEMP:
-        if (!allow_all) {
-            blecmd = NO_COMMAND;
-            break;
-        }
-        // CHECK_PROPERTY(cmd_uart);
-        // CHECK_PROPERTY(allow_all);
-
-        char* temp_h = (char*)(malloc(1));
-        char* temp_l = (char*)(malloc(1));
-        if (!temp_h || !temp_l) {
-            ESP_LOGE(TAG, "Memory allocation failed for temperature parameters.!\n");
-            return 0;
-        }
-        memcpy(temp_h, &packet[1], 1);
-        memcpy(temp_l, &packet[2], 1);
-
-        bleParameters[0] = temp_h;
-        bleParameters[1] = temp_l;
-        break;
-
-    case SET_RELAYS:
-        if (!allow_all) {
-            blecmd = NO_COMMAND;
-            break;
-        }
-        // CHECK_PROPERTY(cmd_uart);
-        // CHECK_PROPERTY(allow_all);
-
-        char* relay_state = (char*)(malloc(1));
-        if (!relay_state) {
-            ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
-            return 0;
-        }
-        memcpy(relay_state, &packet[1], 1);
-        bleParameters[0] = relay_state;
-        break;
-
-    case CHANGE_DEVICE_MODE:
-        if (!allow_all) {
-            blecmd = NO_COMMAND;
-            break;
-        }
-        // CHECK_PROPERTY(cmd_uart);
-        // CHECK_PROPERTY(allow_all);
-
-        char* mode = (char*)(malloc(1));
-        if (!mode) {
-            ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
-            return 0;
-        }
-        memcpy(mode, &packet[1], 1);
-        bleParameters[0] = mode;
-        break;
-
-    default:
-        blecmd = NO_COMMAND;
-        break;
     }
+    
+    
 
     if((blecmd < 1) || (blecmd >= MAX_BLE_CMDS))
     {

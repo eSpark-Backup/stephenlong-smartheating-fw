@@ -12,10 +12,10 @@
 #include "Heater_interface.h"
 #include "Status_led.h"
 #include "Comm_Interface.h"
-#include "LD2410.h"
+#include "LD2410_interface.hpp"
 
 
-LD2410 ld24;
+LD2410Interface presence;
 
 static int64_t press_start_time = 0;
 static void IRAM_ATTR button_isr_handler(void *arg)
@@ -124,6 +124,28 @@ void execute_command(void)
         send_ble_uart_notification(ESP_OK, &presenceState, 1);
         break;
     }
+    case SET_DETECTION_RANGE:{
+        ESP_LOGI(DEVICE_TAG, "Setting Detection Range to %d", *(uint8_t*)bleParameters[0]);
+        send_ble_uart_notification(ESP_OK, NULL, 0);
+        break;
+    }
+    case SET_GATE_SENSITIVITY:{
+        ESP_LOGI(DEVICE_TAG, "Setting Gate Sensitivity of %d Gates", *(uint8_t*)bleParameters[0]);
+        for (int i = 0; i < *numberOfGates; i++) {
+            ESP_LOGI(DEVICE_TAG, "Gate: %d, Value: %d\n", gateParams[i].gate, gateParams[i].value);
+            // printf("Gate: %d, Value: %d\n", gateParams[i].gate, gateParams[i].value);
+        }
+        send_ble_uart_notification(ESP_OK, NULL, 0);
+        break;
+    }
+    case SET_DETECTION_DURATION:{
+        ESP_LOGI(DEVICE_TAG, "Setting Detection Duration to %d", *(uint8_t*)bleParameters[0]);
+        send_ble_uart_notification(ESP_OK, NULL, 0);
+        break;
+    }
+
+
+
     default:
         ESP_LOGE(DEVICE_TAG, "Invalid command received: %X", blecmd);
         break;
@@ -170,7 +192,15 @@ void button_init(void)
 
 extern "C" void app_main(void)
 {
-    ld24.beginUART(GPIO_NUM_17 , GPIO_NUM_18 , 115200);
+    if(presence.LD2410_init() == true){
+        ESP_LOGI(GPIO_TAG, "LD2410 initialized");
+        
+    }
+    else{
+        ESP_LOGI(GPIO_TAG, "LD2410 failed");
+        
+    }
+
     status_led_init();
     device_data_init();
     button_init();

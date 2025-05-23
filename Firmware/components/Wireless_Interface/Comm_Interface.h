@@ -76,6 +76,15 @@ struct gatts_profile_inst
     esp_bt_uuid_t descr_uuid;
 };
 
+typedef struct{
+    uint8_t gate;
+    uint8_t value;
+}GateParameters;
+
+extern GateParameters* gateParams;  // Pointer to array
+extern char *numberOfGates;
+
+
 extern struct gatts_profile_inst gl_profile_tab[PROFILE_NUM];
 
 void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
