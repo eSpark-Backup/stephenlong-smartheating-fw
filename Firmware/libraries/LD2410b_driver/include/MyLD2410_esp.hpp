@@ -19,6 +19,11 @@
 #define LD2410_BUFFER_SIZE 0x40
 #define LD2410_LATEST_FIRMWARE "2.44"
 
+
+// #define UART_BAUD_RATE     115200
+// #define UART_BUF_SIZE      (1024)
+
+
 #define TAG "LD2410_DRIVER"
 
 typedef uint8_t byte;
@@ -164,6 +169,7 @@ private:
   //    */
   esp_err_t uartInit();
   bool begin();
+  
 
 //   /**
 //    * @brief Call this function to gracefully close the sensor. Useful for entering sleep mode.
@@ -196,7 +202,7 @@ private:
 //    * @brief Check whether the device is in config mode
 //    * (accepts commands)
 //    */
-//   bool inConfigMode();
+  // bool inConfigMode();
 
 //   /**
 //    * @brief Check whether the device is in basic mode
@@ -322,7 +328,7 @@ private:
 //    *
 //    * @return String
 //    */
-//   String getFirmware();
+  std::string getFirmware();
 
 //   /**
 //    *  @brief Get the Firmware Major
@@ -396,7 +402,7 @@ private:
 //    *
 //    * @return byte
 //    */
-//   byte getNoOneWindow();
+  byte getNoOneWindow();
 //   // end parameters
 
 //   // REQUESTS
@@ -407,7 +413,7 @@ private:
 //    * @param enable [true]/false
 //    * @return true on success
 //    */
-//   bool configMode(bool enable = true);
+  bool configMode(bool enable = true);
 
 //   /**
 //    * @brief Request enhanced mode
@@ -453,7 +459,7 @@ private:
 //    *
 //    * @return true on success
 //    */
-//   bool requestFirmware();
+  bool requestFirmware();
 
 //   /**
 //    * @brief Request the resolution (gate-width)
@@ -476,7 +482,7 @@ private:
 //    *
 //    * @return true on success
 //    */
-//   bool requestParameters();
+  bool requestParameters();
 
 //   /**
 //    * @brief Set the gate parameters for a particular gate, or for all gates at once
@@ -507,7 +513,7 @@ private:
 //    * @param noOneWindow
 //    * @return true on success
 //    */
-//   bool setMaxGate(byte movingGate, byte stationaryGate, byte noOneWindow = 5);
+  bool setMaxGate(byte movingGate, byte stationaryGate, byte noOneWindow = 5);
 
 //   /**
 //    * @brief Set the no-one window parameter
@@ -515,7 +521,7 @@ private:
 //    * @param noOneWindow in [s]
 //    * @return true on success
 //    */
-//   bool setNoOneWindow(byte noOneWindow);
+  bool setNoOneWindow(byte noOneWindow);
 
 //   /**
 //    * @brief Set the maximum moving gate
@@ -545,21 +551,21 @@ private:
 //    *
 //    * @return true on success
 //    */
-//   bool requestReboot();
+  bool requestReboot();
 
 //   /**
 //    * @brief Turn Bluetooth ON
 //    *
 //    * @return true on success
 //    */
-//   bool requestBTon();
+  bool requestBTon();
 
 //   /**
 //    * @brief Turn Bluetooth OFF
 //    *
 //    * @return true on success
 //    */
-//   bool requestBToff();
+  bool requestBToff();
 
 //   /**
 //    * @brief Set a new BT password.

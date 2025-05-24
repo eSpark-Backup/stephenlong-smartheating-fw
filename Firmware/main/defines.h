@@ -45,6 +45,10 @@ extern "C" {
 #define GATTS_TAG                   "_BLE"
 #define ISR_TAG                     "_ISR"
 
+#define UART_TX 5
+#define UART_RX 4
+
+
 #define BLE_RESPONSE_SUCCESS        0xA1
 #define BLE_RESPONSE_FAIL           0xA2
 

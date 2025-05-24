@@ -1,5 +1,11 @@
 #include "MyLD2410_esp.hpp"
 
+#define UART_PORT_NUM      UART_NUM_1
+// #define UART_TX_PIN        GPIO_NUM_7
+#define UART_TX_PIN        GPIO_NUM_5
+// #define UART_RX_PIN        GPIO_NUM_6
+#define UART_RX_PIN        GPIO_NUM_4
+
 namespace LD2410
 {
   const char *tStatus[7]{
@@ -57,21 +63,27 @@ void printBuf(const byte *buf, byte size) {
     uart_wait_tx_done(UART_NUM_1, portMAX_DELAY);
 }
 
-bool bufferEndsWith(const char *buf, int iMax, const char *other) {
-    if (iMax < 3) return false; // Not enough data to compare
+bool bufferEndsWith(const char *buf, int iMax, const char *other) 
+{
+    // if (iMax < 3) return false; // Not enough data to compare
     
-    for (int j = 3; j >= 0; j--) {
-        if (buf[iMax - (3 - j)] != other[j]) {
-            return false;
-        }
+     
+    for (int j = 3; j >= 0; j--)
+    {
+      if (--iMax < 0)
+        iMax = 3;
+      if (buf[iMax] != other[j])
+        return false;
     }
     return true;
+
 }
 } // namespace LD2410
 
 
 MyLD2410::Response MyLD2410::check() {
     size_t length = 0;
+    
     uart_get_buffered_data_len(UART_NUM_1, &length);
     
     while (length > 0) {
@@ -80,6 +92,7 @@ MyLD2410::Response MyLD2410::check() {
         
         if (len == 1) {
             headBuf[headBufI++] = byte_read;
+                        // printf("head buff value: %x\n\r", headBuf[(headBufI - 1 + 4) % 4]); 
             headBufI %= 4;
             
             // Check for configuration frame header
@@ -107,8 +120,10 @@ MyLD2410::Response MyLD2410::check() {
 }
 bool MyLD2410::processData() {
     if (!readFrame()) {
+        printf("process data readFrame FAILED\n\r"); 
         return false;
     }
+    printf("process data readFrame PASSED\n\r"); 
     
     //   if (_debug) {
     //     ESP_LOGI(TAG, "Processed data - Status: %" PRIu8 ", Moving Dist: %" PRIu16 "cm, Stationary Dist: %" PRIu16 "cm",
@@ -118,31 +133,34 @@ bool MyLD2410::processData() {
     // }
     
     if (!LD2410::bufferEndsWith((const char*)inBuf, inBufI, (const char*)LD2410::tailData)) {
+        printf("process data buffer ends with FAILED\n\r"); 
         return false;
     }
-    
+    printf("process data buffer ends with passed\n\r"); 
+    printf("process data inBuf[2] : %x\n\r",inBuf[2]);
+    printf("process data inBuf[3] : %x\n\r",inBuf[3]);
     // Check frame type (Basic or Enhanced mode)
-    if (((inBuf[0] == 1) || (inBuf[0] == 2)) && (inBuf[1] == 0xAA)) {
+    if (((inBuf[2] == 1) || (inBuf[2] == 2)) && (inBuf[3] == 0xAA)) {
         // Update timestamp using ESP32's time function
         sData.timestamp = esp_timer_get_time() / 1000; // Convert µs to ms
         
         // Parse common data fields
-        sData.status = inBuf[2] & 0x07;
-        sData.mTargetDistance = inBuf[3] | (inBuf[4] << 8);
-        sData.mTargetSignal = inBuf[5];
-        sData.sTargetDistance = inBuf[6] | (inBuf[7] << 8);
-        sData.sTargetSignal = inBuf[8];
-        sData.distance = inBuf[9] | (inBuf[10] << 8);
+        sData.status = inBuf[4] & 0x07;
+        sData.mTargetDistance = inBuf[5] | (inBuf[6] << 8);
+        sData.mTargetSignal = inBuf[7];
+        sData.sTargetDistance = inBuf[8] | (inBuf[9] << 8);
+        sData.sTargetSignal = inBuf[10];
+        sData.distance = inBuf[11] | (inBuf[12] << 8);
         
-        if (inBuf[0] == 1) {  // Enhanced mode
+        if (inBuf[2] == 1) {  // Enhanced mode
             isEnhanced = true;
             
             // Parse target signals
-            sData.mTargetSignals.setN(inBuf[11]);
-            sData.sTargetSignals.setN(inBuf[12]);
+            sData.mTargetSignals.setN(inBuf[13]);
+            sData.sTargetSignals.setN(inBuf[14]);
             
             // Use pointer arithmetic safely
-            const byte* p = inBuf + 13;
+            const byte* p = inBuf + 14;
             for (byte i = 0; i <= sData.mTargetSignals.N && (p - inBuf) < inBufI; i++) {
                 sData.mTargetSignals.values[i] = *p++;
             }
@@ -175,27 +193,34 @@ bool MyLD2410::processData() {
 
 bool MyLD2410::processAck() {
     if (!readFrame()) {
+         printf("[readFrame] failed\n\r");
         return false;
     }
     
     if (_debug) {
         LD2410::printBuf(inBuf, inBufI);
     }
-    
+ 
     if (!LD2410::bufferEndsWith((const char*)inBuf, inBufI, (const char*)LD2410::tailConfig)) {
+        printf("[processAck] bufferEndsWith failed\n\r");
         return false;
     }
-    
-    unsigned long command = inBuf[0] | (inBuf[1] << 8);
-    if (inBuf[2] | (inBuf[3] << 8)) {
-        return false;
+
+    // unsigned long command = inBuf[0] | (inBuf[1] << 8);
+    unsigned long command = inBuf[2] | (inBuf[3] << 8);
+
+
+    if (inBuf[4] | (inBuf[5] << 8)) {
+        printf("[processAck] buffer adjustment failed\n\r");
+        // return false;
     }
+    printf("[processAck] COMMAND: 0x%lx\n\r",command);
     
     switch (command) {
         case 0x1FF: // entered config mode
             isConfig = true;
-            version = inBuf[4] | (inBuf[5] << 8);
-            bufferSize = inBuf[6] | (inBuf[7] << 8);
+            version = inBuf[6] | (inBuf[7] << 8);
+            bufferSize = inBuf[8] | (inBuf[9] << 8);
             break;
             
         case 0x1FE: // exited config mode
@@ -205,7 +230,7 @@ bool MyLD2410::processAck() {
         case 0x1A5: { // MAC
               char mac_temp[18];
               for (int i = 0; i < 6; i++) {
-                  MAC[i] = inBuf[i + 4];
+                  MAC[i] = inBuf[i + 6];
                   snprintf(mac_temp + i*3, 4, "%02X%s", MAC[i], (i < 5) ? ":" : "");
               }
               MACstr = mac_temp; // std::string assignment handles memory
@@ -213,29 +238,29 @@ bool MyLD2410::processAck() {
           }
           
           case 0x1A0: { // Firmware
-              firmwareMajor = inBuf[7];
-              firmwareMinor = inBuf[6];
+              firmwareMajor = inBuf[9];
+              firmwareMinor = inBuf[8];
               
               char fw_temp[16];
               snprintf(fw_temp, sizeof(fw_temp), "%d.%d.%02X%02X%02X", 
-                      firmwareMajor, firmwareMinor, inBuf[11], inBuf[10], inBuf[9]);
+                      firmwareMajor, firmwareMinor, inBuf[13], inBuf[12], inBuf[11]);
               
               firmware = fw_temp; // std::string assignment handles memory
               break;
           }
             
         case 0x1AB: // Query Resolution
-            fineRes = inBuf[4];
+            fineRes = inBuf[6];
             break;
             
         case 0x1AE: // Query auxiliary control parameters
-            lightControl = LightControl(inBuf[4]);
-            lightThreshold = inBuf[5];
-            outputControl = OutputControl(inBuf[6]);
+            lightControl = LightControl(inBuf[6]);
+            lightThreshold = inBuf[7];
+            outputControl = OutputControl(inBuf[8]);
             break;
             
         case 0x11B:
-            autoStatus = AutoStatus(inBuf[4]);
+            autoStatus = AutoStatus(inBuf[6]);
             break;
             
         case 0x1A3: // Reboot
@@ -244,19 +269,19 @@ bool MyLD2410::processAck() {
             break;
             
         case 0x161: { // Query parameters
-            maxRange = inBuf[5];
-            movingThresholds.setN(inBuf[6]);
-            stationaryThresholds.setN(inBuf[7]);
+            maxRange = inBuf[7];
+            movingThresholds.setN(inBuf[8]);
+            stationaryThresholds.setN(inBuf[9]);
             
             for (byte i = 0; i <= movingThresholds.N; i++) {
-                movingThresholds.values[i] = inBuf[8 + i];
+                movingThresholds.values[i] = inBuf[10 + i];
             }
             
             for (byte i = 0; i <= stationaryThresholds.N; i++) {
-                stationaryThresholds.values[i] = inBuf[17 + i];
+                stationaryThresholds.values[i] = inBuf[19 + i];
             }
             
-            noOne_window = inBuf[26] | (inBuf[27] << 8);
+            noOne_window = inBuf[28] | (inBuf[29] << 8);
             break;
         }
             
@@ -269,10 +294,12 @@ bool MyLD2410::processAck() {
             break;
             
         case 0x164:
-            if (LD2410::gateParam[7] == 0xFF) {
-                LD2410::gateParam[7] = 0;
-            }
+            if (LD2410::gateParam[9] == 0xFF) 
+                LD2410::gateParam[9] = 0;
+        default:
+            printf("[processAck] Unrecognized command: 0x%lx\n\r", command);
             break;
+                    
     }
     
     return true;
@@ -292,6 +319,7 @@ bool MyLD2410::readFrame() {
                 bytes--;
             } else {
                 // Timeout or error
+                    printf("[readFrame] timeout1\n\r");
                 return false;
             }
         }
@@ -300,6 +328,7 @@ bool MyLD2410::readFrame() {
     }
     
     if (frameSize <= 0) {
+        printf("[readFrame] frame size <=0\n\r");
         return false;
     }
     
@@ -313,6 +342,8 @@ bool MyLD2410::readFrame() {
             inBuf[inBufI++] = byte_read;
             frameSize--;
         } else {
+                    printf("[readFrame] timeout2\n\r");
+
             // Timeout or error
             return false;
         }
@@ -334,9 +365,10 @@ esp_err_t MyLD2410::uartInit(){
         .source_clk = UART_SCLK_DEFAULT
     };
     err = uart_param_config(UART_NUM_1, &uart_config);
-     err = uart_driver_install(UART_NUM_1, 1024, 0, 0, NULL, 0);
+    err=  uart_set_pin(UART_NUM_1, 5, 4, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    err = uart_driver_install(UART_NUM_1, 1024, 0, 0, NULL, 0);
     return(err);
-}
+    }
 
 bool MyLD2410::sendCommand(const byte *command) {
     byte size = command[0] + 2;
@@ -355,23 +387,26 @@ bool MyLD2410::sendCommand(const byte *command) {
     
     // Set up timeout
     uint64_t giveUp = esp_timer_get_time() / 1000 + timeout; // Convert µs to ms
-    uint8_t headBuf[4] = {0};
-    uint8_t headBufI = 0;
+  
     
-    while ((esp_timer_get_time() / 1000) < giveUp) {
-        uint8_t byte_read;
-        int len = uart_read_bytes(UART_NUM_1, &byte_read, 1, pdMS_TO_TICKS(10));
-        
-        if (len == 1) {
-            headBuf[headBufI++] = byte_read;
-            headBufI %= 4;
-            
-            if (LD2410::bufferEndsWith((const char*)headBuf, headBufI, (const char*)LD2410::headConfig)) {
-                printf("[sendCommand] reached\n\r");
-                return processAck();
+
+        while ((esp_timer_get_time() / 1000) < giveUp) {
+            uint8_t byte_read;
+            int len;
+
+            while ((len = uart_read_bytes(UART_NUM_1, &byte_read, 1, 0)) == 1) {
+   
+                headBuf[headBufI++] = byte_read;
+                //  printf("head buff value: %x\n\r", headBuf[(headBufI - 1 + 4) % 4]); 
+                headBufI %= 4;
+
+                if (LD2410::bufferEndsWith((const char*)headBuf, headBufI, (const char*)LD2410::headConfig)) {
+                    printf("[sendCommand] reached\n\r");
+                    return processAck();
+                }
             }
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
-    }
     return false;
 }
 
@@ -383,15 +418,102 @@ bool MyLD2410::begin() {
     isConfig = false;
 
     // Send initial configuration disable command
-    sendCommand(LD2410::configDisable);
-
+     sendCommand(LD2410::configDisable);
+    // uint8_t ret = sendCommand(LD2410::configDisable);
+    // if(!ret){
+    //     printf("sendCommand failed with error code:%d\n\r", ret);
+    //     }
+    
     while ((esp_timer_get_time() / 1000) < giveUp) {
         if (check() != FAIL) {
             online = true;
             break;
         }
+         
         vTaskDelay(pdMS_TO_TICKS(110)); // Non-blocking delay
     }
 
     return online;
+}
+
+bool MyLD2410::configMode(bool enable)
+{
+  if (enable && !isConfig)
+    return sendCommand(LD2410::configEnable);
+  if (!enable && isConfig)
+    return sendCommand(LD2410::configDisable);
+  return false;
+}
+
+
+bool MyLD2410::requestBTon()
+{
+  if (isConfig)
+    return sendCommand(LD2410::BTon);
+  return configMode() && sendCommand(LD2410::BTon) && configMode(false);
+}
+
+bool MyLD2410::requestBToff()
+{
+  if (isConfig)
+    return sendCommand(LD2410::BToff);
+  return configMode() && sendCommand(LD2410::BToff) && configMode(false);
+}
+
+bool MyLD2410::requestReboot()
+{
+  if (isConfig)
+    return sendCommand(LD2410::reboot);
+  return configMode() && sendCommand(LD2410::reboot);
+}
+
+bool MyLD2410::requestFirmware()
+{
+  if (isConfig)
+    return sendCommand(LD2410::firmware);
+  return configMode() && sendCommand(LD2410::firmware) && configMode(false);
+}
+
+std::string MyLD2410::getFirmware()
+{
+  if (firmware.length() == 0)
+    requestFirmware();
+  return firmware;
+}
+
+bool MyLD2410::requestParameters()
+{
+  if (isConfig)
+    return sendCommand(LD2410::param);
+  return configMode() && sendCommand(LD2410::param) && configMode(false);
+}
+bool MyLD2410::setMaxGate(byte movingGate, byte staticGate, byte noOneWindow)
+{
+  if (movingGate > 8)
+    movingGate = 8;
+  if (staticGate > 8)
+    staticGate = 8;
+  byte *cmd = LD2410::maxGate;
+  cmd[6] = movingGate;
+  cmd[12] = staticGate;
+  cmd[18] = noOneWindow;
+  if (isConfig && sendCommand(cmd))
+    return sendCommand(LD2410::param);
+  return configMode() && sendCommand(cmd) && sendCommand(LD2410::param) && configMode(false);
+}
+
+bool MyLD2410::setNoOneWindow(byte noOneWindow)
+{
+  if (!maxRange)
+    requestParameters();
+  if (noOne_window == noOneWindow)
+    return true;
+  return setMaxGate(movingThresholds.N, stationaryThresholds.N, noOneWindow);
+}
+
+byte MyLD2410::getNoOneWindow()
+{
+  if (!maxRange)
+    requestParameters();
+  return noOne_window;
 }

@@ -133,6 +133,7 @@ void execute_command(void)
         ESP_LOGI(DEVICE_TAG, "Setting Gate Sensitivity of %d Gates", *(uint8_t*)bleParameters[0]);
         for (int i = 0; i < *numberOfGates; i++) {
             ESP_LOGI(DEVICE_TAG, "Gate: %d, Value: %d\n", gateParams[i].gate, gateParams[i].value);
+            
             // printf("Gate: %d, Value: %d\n", gateParams[i].gate, gateParams[i].value);
         }
         send_ble_uart_notification(ESP_OK, NULL, 0);
@@ -140,6 +141,7 @@ void execute_command(void)
     }
     case SET_DETECTION_DURATION:{
         ESP_LOGI(DEVICE_TAG, "Setting Detection Duration to %d", *(uint8_t*)bleParameters[0]);
+        presence.setDetectionDuration(*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     }
