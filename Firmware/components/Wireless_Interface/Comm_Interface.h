@@ -78,7 +78,8 @@ struct gatts_profile_inst
 
 typedef struct{
     uint8_t gate;
-    uint8_t value;
+    uint8_t movingThreshold;
+    uint8_t stationaryThreshold;
 }GateParameters;
 
 extern GateParameters* gateParams;  // Pointer to array

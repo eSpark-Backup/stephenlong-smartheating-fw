@@ -214,7 +214,7 @@ bool MyLD2410::processAck() {
         printf("[processAck] buffer adjustment failed\n\r");
         // return false;
     }
-    printf("[processAck] COMMAND: 0x%lx\n\r",command);
+    // printf("[processAck] COMMAND: 0x%lx\n\r",command);
     
     switch (command) {
         case 0x1FF: // entered config mode
@@ -273,12 +273,15 @@ bool MyLD2410::processAck() {
             movingThresholds.setN(inBuf[8]);
             stationaryThresholds.setN(inBuf[9]);
             
+            
             for (byte i = 0; i <= movingThresholds.N; i++) {
-                movingThresholds.values[i] = inBuf[10 + i];
+              movingThresholds.values[i] = inBuf[10 + i];
+              printf("[processAck]  movingThresholds value: %d \n\r" , inBuf[10 + i]);
             }
             
             for (byte i = 0; i <= stationaryThresholds.N; i++) {
-                stationaryThresholds.values[i] = inBuf[19 + i];
+              stationaryThresholds.values[i] = inBuf[19 + i];
+              printf("[processAck]  stationaryThresholds value: %d \n\r" , inBuf[19 + i]);
             }
             
             noOne_window = inBuf[28] | (inBuf[29] << 8);
@@ -352,11 +355,11 @@ bool MyLD2410::readFrame() {
     return true;
 }
 
-esp_err_t MyLD2410::uartInit(){
+esp_err_t MyLD2410::uartInit(uart_port_t uart_num ,int UART_TX ,int UART_RX , int BAUD_RATE ){
     esp_err_t err;
 
     uart_config_t uart_config = {
-        .baud_rate = LD2410_BAUD_RATE,
+        .baud_rate = BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -364,9 +367,9 @@ esp_err_t MyLD2410::uartInit(){
         .rx_flow_ctrl_thresh = 0,  // Add this line
         .source_clk = UART_SCLK_DEFAULT
     };
-    err = uart_param_config(UART_NUM_1, &uart_config);
-    err=  uart_set_pin(UART_NUM_1, 5, 4, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    err = uart_driver_install(UART_NUM_1, 1024, 0, 0, NULL, 0);
+    err = uart_param_config(uart_num, &uart_config);
+    err=  uart_set_pin(uart_num, UART_TX, UART_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    err = uart_driver_install(uart_num, 1024, 0, 0, NULL, 0);
     return(err);
     }
 
@@ -401,7 +404,7 @@ bool MyLD2410::sendCommand(const byte *command) {
                 headBufI %= 4;
 
                 if (LD2410::bufferEndsWith((const char*)headBuf, headBufI, (const char*)LD2410::headConfig)) {
-                    printf("[sendCommand] reached\n\r");
+                    // printf("[sendCommand] reached\n\r");
                     return processAck();
                 }
             }
@@ -487,6 +490,7 @@ bool MyLD2410::requestParameters()
     return sendCommand(LD2410::param);
   return configMode() && sendCommand(LD2410::param) && configMode(false);
 }
+
 bool MyLD2410::setMaxGate(byte movingGate, byte staticGate, byte noOneWindow)
 {
   if (movingGate > 8)
@@ -502,6 +506,13 @@ bool MyLD2410::setMaxGate(byte movingGate, byte staticGate, byte noOneWindow)
   return configMode() && sendCommand(cmd) && sendCommand(LD2410::param) && configMode(false);
 }
 
+byte MyLD2410::getMaxGate(){
+
+  requestParameters();
+  return(movingThresholds.N);
+
+} 
+
 bool MyLD2410::setNoOneWindow(byte noOneWindow)
 {
   if (!maxRange)
@@ -516,4 +527,97 @@ byte MyLD2410::getNoOneWindow()
   if (!maxRange)
     requestParameters();
   return noOne_window;
+}
+
+
+bool MyLD2410::setResolution(bool fine)
+{
+  if (isConfig && sendCommand(((fine) ? LD2410::resFine : LD2410::resCoarse)))
+    return sendCommand(LD2410::res);
+  return configMode() && sendCommand(((fine) ? LD2410::resFine : LD2410::resCoarse)) && sendCommand(LD2410::res) && configMode(false);
+}
+
+byte MyLD2410::getResolution()
+{
+  if (fineRes >= 0)
+    return ((fineRes == 1) ? 20 : 75);
+  if (isConfig)
+  {
+    if (sendCommand(LD2410::res))
+      return getResolution();
+  }
+  else
+  {
+    if (configMode() && sendCommand(LD2410::res) && configMode(false))
+      return getResolution();
+  }
+  return 0;
+}
+
+byte MyLD2410::getRange()
+{
+  if (!maxRange)
+    requestParameters();
+  
+  return maxRange;
+}
+  
+unsigned long MyLD2410::getRange_cm()
+{
+    return (getRange() + 1) * getResolution();
+}
+  
+uint16_t MyLD2410::getConfiguredRange(){
+    
+    requestParameters();
+    return((getMaxGate()*2)*(getResolution()));
+
+};
+
+
+bool MyLD2410::requestResolution()
+{
+  if (isConfig)
+    return sendCommand(LD2410::res);
+  return configMode() && sendCommand(LD2410::res) && configMode(false);
+}
+
+
+bool MyLD2410::setGateParameters(byte gate, byte movingThreshold, byte stationaryThreshold)
+{
+  if (movingThreshold > 100)
+    movingThreshold = 100;
+  if (stationaryThreshold > 100)
+    stationaryThreshold = 100;
+  byte *cmd = LD2410::gateParam;
+  if (gate > 8)
+  {
+    cmd[6] = 0xFF;
+    cmd[7] = 0xFF;
+  }
+  else
+  {
+    cmd[6] = gate;
+    cmd[7] = 0;
+  }
+  cmd[12] = movingThreshold;
+  cmd[18] = stationaryThreshold;
+  if (isConfig && sendCommand(cmd))
+    return sendCommand(LD2410::param);
+  return configMode() && sendCommand(cmd) && sendCommand(LD2410::param) && configMode(false);
+}
+
+
+const MyLD2410::ValuesArray &MyLD2410::getMovingThresholds()
+{
+  if (!maxRange)
+    requestParameters();
+  return movingThresholds;
+}
+
+const MyLD2410::ValuesArray &MyLD2410::getStationaryThresholds()
+{
+  if (!maxRange)
+    requestParameters();
+  return stationaryThresholds;
 }

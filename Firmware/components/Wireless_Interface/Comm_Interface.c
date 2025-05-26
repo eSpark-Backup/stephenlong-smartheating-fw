@@ -330,13 +330,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
-            char* range = (char*)(malloc(1));
-            if (!range) {
-                ESP_LOGE(TAG, "Memory allocation failed for detection range parameter.!\n");
+            char* resolution = (char*)(malloc(1));
+            char* activeGates = (char*)(malloc(1));
+            if (!resolution || !activeGates ) {
+                ESP_LOGE(TAG, "Memory allocation failed for detection range parameters.!\n");
                 return 0;
             }               
-            memcpy(range, &packet[1], 1);
-            bleParameters[0] = range;
+            memcpy(resolution, &packet[1], 1);
+            memcpy(activeGates, &packet[2], 1);
+            bleParameters[0] = resolution;
+            bleParameters[1] = activeGates;
             ESP_LOGE(TAG, "SET_DETECTION_RANGE!\n");
             break;
     
@@ -357,8 +360,9 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
 
                 for (int i = 0; i < *numberOfGates; i++) {
    
-                        gateParams[i].gate = packet[ 2 + (i*2) ]; //2 4 6
-                        gateParams[i].value =packet[ 3 + (i*2) ]; //3 5 7
+                        gateParams[i].gate = packet[ 2 + (i*3) ]; //2 5 8
+                        gateParams[i].movingThreshold = packet[ 3 + (i*3) ]; //3 6 9
+                        gateParams[i].stationaryThreshold = packet[ 4 + (i*3) ]; //4 7 10
 
                     }
     

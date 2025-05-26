@@ -19,10 +19,13 @@ esp_err_t device_data_init(void)
             err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
             device_data.mode = MANUAL_MODE;
             device_data.target_temp = 0;
+            device_data.duration_val = 0;
             nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
             nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
+            nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
             ESP_LOGW(DEVICE_TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
             ESP_LOGW(DEVICE_TAG, "Target temp not set. Setting to 0.");
+            ESP_LOGW(DEVICE_TAG, "Presence detection duration val not set 0.");
             nvs_commit(nvs);
         }
         // return err;
@@ -46,10 +49,19 @@ esp_err_t device_data_init(void)
             nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
             nvs_commit(nvs);
         }
+        err = nvs_get_u8(nvs, NVS_KEY_DETECTION_DURATION, &device_data.duration_val);
+        if (err != ESP_OK)
+        {
+            device_data.duration_val = 0;
+            ESP_LOGE(DEVICE_TAG, "Presence detection duration val not set 0.");
+            nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
+            nvs_commit(nvs);
+        }
     }
 
     ESP_LOGW(DEVICE_TAG, "Device mode: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
     ESP_LOGW(DEVICE_TAG, "Target temp: %0.2f", device_data.target_temp);
+    ESP_LOGW(DEVICE_TAG, "Presence detection duration val: %x", device_data.duration_val);
 
     nvs_close(nvs);
 
@@ -89,6 +101,10 @@ esp_err_t device_data_set(uint8_t op)
     {
         err |= nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
     }
+    else if(op == 2)
+    {
+        err |= nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
+    }
     // else if(op == 2)
     // {
     //     err |= nvs_set_str(nvs, NVS_KEY_SSID, device_data.ssid);
@@ -127,6 +143,21 @@ void set_target_temp(float target_temp)
 float get_target_temp(void)
 {
     return device_data.target_temp;
+}
+
+void set_detection_duration(uint8_t duration_val)
+{
+    // device_data.target_temp = target_temp;
+    device_data.duration_val = duration_val;
+    ESP_LOGD(DEVICE_TAG, "Presence Detection Duration time set to: %x", device_data.duration_val);
+    
+    
+    device_data_set(2);
+}
+
+float get_detection_duration(void)
+{
+    return device_data.duration_val;
 }
 
 void set_device_mode(DEVICE_MODE mode)

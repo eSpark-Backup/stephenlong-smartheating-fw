@@ -15,7 +15,7 @@
  * @file MyLD2410.h
  */
 
-#define LD2410_BAUD_RATE 256000
+// #define LD2410_BAUD_RATE 256000
 #define LD2410_BUFFER_SIZE 0x40
 #define LD2410_LATEST_FIRMWARE "2.44"
 
@@ -167,7 +167,8 @@ private:
   //   /**
   //    * @brief Call this function in setup() to ascertain whether the device is responding
   //    */
-  esp_err_t uartInit();
+  esp_err_t uartInit(uart_port_t uart_num ,int UART_TX ,int UART_RX , int BAUD_RATE );
+  
   bool begin();
   
 
@@ -363,7 +364,7 @@ private:
 //    *
 //    * @return byte either 20 or 75 on success, 0 on failure
 //    */
-//   byte getResolution();
+  byte getResolution();
 
 //   // parameters
 
@@ -372,28 +373,29 @@ private:
 //    *
 //    * @return const ValuesArray&
 //    */
-//   const ValuesArray &getMovingThresholds();
+  const ValuesArray &getMovingThresholds();
 
 //   /**
 //    * @brief Get the detection thresholds for stationary targets
 //    *
 //    * @return const ValuesArray&
 //    */
-//   const ValuesArray &getStationaryThresholds();
+  const ValuesArray &getStationaryThresholds();
 
 //   /**
 //    * @brief Get the maximum detection gate
 //    *
 //    * @return byte
 //    */
-//   byte getRange();
+  byte getRange();
 
+  uint16_t getConfiguredRange();
 //   /**
 //    * @brief Get the maximum detection range in [cm]
 //    *
 //    * @return unsigned long
 //    */
-//   unsigned long getRange_cm();
+  unsigned long getRange_cm();
 
 //   /**
 //    * @brief Get the time-lag of "no presence" in [s].
@@ -466,7 +468,7 @@ private:
 //    *
 //    * @return true on success
 //    */
-//   bool requestResolution();
+  bool requestResolution();
 
 //   /**
 //    * @brief Set the resolution of the sensor
@@ -474,7 +476,7 @@ private:
 //    * @param fine true=20cm; [false]=75cm
 //    * @return true on success
 //    */
-//   bool setResolution(bool fine = false);
+  bool setResolution(bool fine = false);
 
 //   /**
 //    * @brief Request the sensor parameters:
@@ -493,7 +495,7 @@ private:
 //    * @param stationaryThreshold [0 - 100]
 //    * @return true on success
 //    */
-//   bool setGateParameters(byte gate, byte movingThreshold = 100, byte stationaryThreshold = 100);
+  bool setGateParameters(byte gate, byte movingThreshold = 100, byte stationaryThreshold = 100);
 
 //   /**
 //    * @brief Set the parameters for all gates at once, as well as the no-one window
@@ -514,6 +516,10 @@ private:
 //    * @return true on success
 //    */
   bool setMaxGate(byte movingGate, byte stationaryGate, byte noOneWindow = 5);
+
+
+  byte getMaxGate();
+
 
 //   /**
 //    * @brief Set the no-one window parameter

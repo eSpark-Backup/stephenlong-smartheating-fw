@@ -125,31 +125,55 @@ void execute_command(void)
         break;
     }
     case SET_DETECTION_RANGE:{
-        ESP_LOGI(DEVICE_TAG, "Setting Detection Range to %d", *(uint8_t*)bleParameters[0]);
+        ESP_LOGI(DEVICE_TAG, "Setting-  Gate resolution: %d , Activated Gates: %d ", *(uint8_t*)bleParameters[0],*(uint8_t*)bleParameters[1]);
+        uint8_t param0 = *(uint8_t*)bleParameters[0];
+        uint8_t param1 = *(uint8_t*)bleParameters[1];
+
+        if ((param0 != 0 && param0 != 1) || (param1 < 1 || param1 > 8)) {
+            ESP_LOGE(DEVICE_TAG, "Invalid Detection Range Parameters");
+            send_ble_uart_notification(ESP_FAIL, NULL, 0);
+            break;
+        }        
+        presence.setDetectionRange((bool)param0 , param1);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     }
     case SET_GATE_SENSITIVITY:{
         ESP_LOGI(DEVICE_TAG, "Setting Gate Sensitivity of %d Gates", *(uint8_t*)bleParameters[0]);
+        bool failedCommand= false;
         for (int i = 0; i < *numberOfGates; i++) {
-            ESP_LOGI(DEVICE_TAG, "Gate: %d, Value: %d\n", gateParams[i].gate, gateParams[i].value);
+            ESP_LOGI(DEVICE_TAG, "Gate: %d, moving threshold: %d , stationary threshold:%d\n", gateParams[i].gate, gateParams[i].movingThreshold,gateParams[i].stationaryThreshold);
+            if((*numberOfGates) > 8 || (*numberOfGates) < 1 || gateParams[i].gate>7 ||gateParams[i].gate < 0 
+                                    || gateParams[i].movingThreshold >100 || gateParams[i].stationaryThreshold>100 ) {
+                ESP_LOGE(DEVICE_TAG, "Invalid Gate Sensitivity Parameters");
+                failedCommand= true;
+            }
             
             // printf("Gate: %d, Value: %d\n", gateParams[i].gate, gateParams[i].value);
         }
-        send_ble_uart_notification(ESP_OK, NULL, 0);
+        if(failedCommand == true){
+            send_ble_uart_notification(ESP_FAIL, NULL, 0);
+        }
+        else{
+            for( uint8_t i=0 ; i<*numberOfGates; i++){
+                presence.setGateSensitivities(gateParams[i].gate, gateParams[i].movingThreshold,gateParams[i].stationaryThreshold);
+            }
+            send_ble_uart_notification(ESP_OK, NULL, 0);
+        }
         break;
     }
     case SET_DETECTION_DURATION:{
-        ESP_LOGI(DEVICE_TAG, "Setting Detection Duration to %d", *(uint8_t*)bleParameters[0]);
+        ESP_LOGI(DEVICE_TAG, "Setting-  Detection Duration: %d", *(uint8_t*)bleParameters[0]);
         presence.setDetectionDuration(*(uint8_t*)bleParameters[0]);
         send_ble_uart_notification(ESP_OK, NULL, 0);
         break;
     }
-
-
-
+    
+    
+    
     default:
         ESP_LOGE(DEVICE_TAG, "Invalid command received: %X", blecmd);
+        send_ble_uart_notification(ESP_FAIL, NULL, 0);
         break;
     }
     free(bleParameters[0]);
@@ -160,20 +184,20 @@ void execute_command(void)
     uart_cmd_handler_flag = false;
 }
 
-void presence_sensor_init(void)
-{
-    gpio_config_t btn_cfg = {
-        .pin_bit_mask = GPIO_PIN_MASK(MOTION_SENSOR_IO),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_ENABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&btn_cfg);
+// void presence_sensor_init(void)
+// {
+//     gpio_config_t btn_cfg = {
+//         .pin_bit_mask = GPIO_PIN_MASK(MOTION_SENSOR_IO),
+//         .mode = GPIO_MODE_INPUT,
+//         .pull_up_en = GPIO_PULLUP_DISABLE,
+//         .pull_down_en = GPIO_PULLDOWN_ENABLE,
+//         .intr_type = GPIO_INTR_DISABLE
+//     };
+//     gpio_config(&btn_cfg);
 
-    ESP_LOGI(GPIO_TAG, "Presence sensor initialized on GPIO %d", MOTION_SENSOR_IO);
+//     ESP_LOGI(GPIO_TAG, "Presence sensor initialized on GPIO %d", MOTION_SENSOR_IO);
     
-}
+// }
 
 void button_init(void)
 {
@@ -194,6 +218,15 @@ void button_init(void)
 
 extern "C" void app_main(void)
 {
+    
+    status_led_init();
+    device_data_init();
+    button_init();
+    // presence_sensor_init();
+    
+    ir_sensor_init();
+    heater_interface_init();
+    
     if(presence.LD2410_init() == true){
         ESP_LOGI(GPIO_TAG, "LD2410 initialized");
         
@@ -202,15 +235,6 @@ extern "C" void app_main(void)
         ESP_LOGI(GPIO_TAG, "LD2410 failed");
         
     }
-
-    status_led_init();
-    device_data_init();
-    button_init();
-    presence_sensor_init();
-
-    ir_sensor_init();
-    heater_interface_init();
-
     // set_heater_temp(27.5);
     // set_heater_mode(AUTO_MODE);
     

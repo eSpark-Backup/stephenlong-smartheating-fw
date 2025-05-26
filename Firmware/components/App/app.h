@@ -18,6 +18,9 @@ esp_err_t reset_device_and_erase_nvs();
 
 void set_target_temp(float target_temp);
 float get_target_temp(void);
+void set_detection_duration(uint8_t duration_val);
+float get_detection_duration(void);
+
 void set_device_mode(DEVICE_MODE mode);
 DEVICE_MODE get_device_mode(void);
 

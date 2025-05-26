@@ -66,9 +66,9 @@ Hex Code | Command | Type | Input | Response Format | Description
 0x08 | Set Relay States | Set | 0x08 [RELAY_STATE] | 0x08 0xA1 (success)<br>0x08 0xA2 (failed) | Controls the state of relays
 0x09 | Set Device Mode | Set | 0x09 [0x01]<br>0x09 [0x02] | 0x09 0xA1 (success)<br>0x09 0xA2 (failed) | Sets the device mode (e.g. auto or manual)
 0x0A | Read Presence | Get | 0x0A | 0x0A [BOOL**] | Retrieves presence status.
-0x0B | Gate Detection Range | Set | 0x0B | 0x0B [RANGE_VAL] | Sets Detection Range of All gates.
-0x0C | Gate Sensitivity | Set | 0x0C | 0x0C [NUMBER_OF_GATES] [GATE1][VAL1]...[GATEN][VALUEN] | Sets sensitivity of Multiple gates(configurable).
-0x0D | Gate Detection Duration | Set | 0x0D | 0x0D [DURATION_VALUE] | Sets the duration after which module returns no detection.
+0x0B | Set Detection Range | Set | 0x0B | 0x0B [GATE_RESOLUTION] [NUMBER_OF_GATES_TO_ACTIVATE] | Sets Detection Range based on the configuration provided . Gate resolution (0x01 = 20cm , 0x00 = 75cm) , number of gates value should be <8 and even . Detection range is the product of these values.
+0x0C | Set Sensitivity | Set | 0x0C | 0x0C [NUMBER_OF_GATES] [GATE1] [MOVING_GATE_THRESH] [STATIONARY_GATE_THRESH]...[GATEN] [MOVING_GATE_THRESH_N] [STATIONARY_GATE_THRESH_N] | Sets sensitivity of Multiple gates(configurable). number of gates should be <8 , gate number range : (0-7) , Moving threshold should be greater than 0 but less than 100 (same for stationary gate) , if the configured threshold is exceeded than presence is detected 
+0x0D | Set Detection Duration | Set | 0x0D | 0x0D [DURATION_VALUE] | Sets the duration after which module returns no detection. Value Range: 0x00-0xFF
 
 
 ---

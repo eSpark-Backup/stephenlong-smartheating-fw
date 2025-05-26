@@ -45,8 +45,12 @@ extern "C" {
 #define GATTS_TAG                   "_BLE"
 #define ISR_TAG                     "_ISR"
 
-#define UART_TX 5
-#define UART_RX 4
+#define LD2410_UART_TX 17
+#define LD2410_UART_RX 16
+// #define LD2410_UART_TX 5
+// #define LD2410_UART_RX 4
+#define LD2410_BAUD 256000
+#define LD2410_UART_PORT UART_NUM_1
 
 
 #define BLE_RESPONSE_SUCCESS        0xA1
@@ -70,6 +74,7 @@ extern "C" {
 #define NVS_KEY_PASSWORD           "password"
 #define NVS_KEY_MODE               "mode"
 #define NVS_KEY_TARGET_TEMP        "target_temp"
+#define NVS_KEY_DETECTION_DURATION "detection_duration"
 
 typedef enum {
     NORMAL_OP = 0x01,
@@ -136,6 +141,7 @@ typedef struct
     float target_temp;
     char ssid[WIFI_SSID_MAX_LEN];
     char password[WIFI_PASS_MAX_LEN];
+    uint8_t duration_val;
 } device_data_t;
 
 const char* get_enum_name(ENUM_TYPE type, int value);
