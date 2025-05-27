@@ -509,7 +509,7 @@ bool MyLD2410::setMaxGate(byte movingGate, byte staticGate, byte noOneWindow)
 byte MyLD2410::getMaxGate(){
 
   requestParameters();
-  return(movingThresholds.N);
+  return(movingThresholds.N + stationaryThresholds.N);
 
 } 
 
@@ -570,7 +570,7 @@ unsigned long MyLD2410::getRange_cm()
 uint16_t MyLD2410::getConfiguredRange(){
     
     requestParameters();
-    return((getMaxGate()*2)*(getResolution()));
+    return((getMaxGate())*(getResolution()));
 
 };
 

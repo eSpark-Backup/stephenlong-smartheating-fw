@@ -2,6 +2,7 @@
 #include <string.h>
 
 #define TAG "COMM_INTERFACE"
+#define COMM_INTERFACE_BLETAG "COMM_INTERFACE"
 
 #define CHECK_PROPERTY(property)                \
     if(!property) {                           \
@@ -33,7 +34,11 @@ char *cmdStringFetch[]  = {
     "readPresence",
     "setDetectionRange",
     "setGateSensitivity",
-    "setDetectionDuration"
+    "setDetectionDuration",
+    "getDetectionRange",
+    "getGateSensitivity",
+    "getDetectionDuration"
+
 };
 
 void ble_command_task(void * pvParameters)
@@ -335,7 +340,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             if (!resolution || !activeGates ) {
                 ESP_LOGE(TAG, "Memory allocation failed for detection range parameters.!\n");
                 return 0;
-            }               
+            }
             memcpy(resolution, &packet[1], 1);
             memcpy(activeGates, &packet[2], 1);
             bleParameters[0] = resolution;
@@ -387,7 +392,31 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
 
             break;
         
-    
+        case GET_DETECTION_RANGE:
+
+
+
+
+
+            break;
+
+        case GET_GATE_SENSITIVITY:
+
+
+
+
+
+            break;
+
+        case GET_DETECTION_DURATION:
+
+
+
+
+
+            break;
+        
+
         default:
             blecmd = NO_COMMAND;
             break;

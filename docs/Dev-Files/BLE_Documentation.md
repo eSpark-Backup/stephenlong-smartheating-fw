@@ -69,6 +69,9 @@ Hex Code | Command | Type | Input | Response Format | Description
 0x0B | Set Detection Range | Set | 0x0B | 0x0B [GATE_RESOLUTION] [NUMBER_OF_GATES_TO_ACTIVATE] | Sets Detection Range based on the configuration provided . Gate resolution (0x01 = 20cm , 0x00 = 75cm) , number of gates value should be <8 and even . Detection range is the product of these values.
 0x0C | Set Sensitivity | Set | 0x0C | 0x0C [NUMBER_OF_GATES] [GATE1] [MOVING_GATE_THRESH] [STATIONARY_GATE_THRESH]...[GATEN] [MOVING_GATE_THRESH_N] [STATIONARY_GATE_THRESH_N] | Sets sensitivity of Multiple gates(configurable). number of gates should be <8 , gate number range : (0-7) , Moving threshold should be greater than 0 but less than 100 (same for stationary gate) , if the configured threshold is exceeded than presence is detected 
 0x0D | Set Detection Duration | Set | 0x0D | 0x0D [DURATION_VALUE] | Sets the duration after which module returns no detection. Value Range: 0x00-0xFF
+0x0E | Get Detection Range | Get | 0x0E | 0x0E [GATE_RESOLUTION] [NUMBER_OF_ACTIVATE_GATES] [SENSOR_RANGE] | Gets the gate resolution ,number of active gates, and the total sensor range
+0x0F | Get Gate Sensitivity Thresholds | Get | 0x0F | 0x0F [MOVING_GATE_0_THRESH].....[MOVING_GATE_N_THRESH] [ACTIVE_MOVING_GATES] [STATIONARY_GATE_0_THRESH].....[STATIONARY_GATE_N_THRESH] [ACTIVE_STATIONARY_GATE]  | Gets the sensitivity threshold for Active moving and stationary gates.
+0x10 | Get Detection Duration | Get | 0x10 | 0x10 [DURATION_VALUE] | Gets the duration after which module returns no detection. Value Range: 0x00-0xFF
 
 
 ---

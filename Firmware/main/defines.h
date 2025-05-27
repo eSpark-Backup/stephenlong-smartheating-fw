@@ -45,10 +45,10 @@ extern "C" {
 #define GATTS_TAG                   "_BLE"
 #define ISR_TAG                     "_ISR"
 
-#define LD2410_UART_TX 17
-#define LD2410_UART_RX 16
-// #define LD2410_UART_TX 5
-// #define LD2410_UART_RX 4
+// #define LD2410_UART_TX 17
+// #define LD2410_UART_RX 16
+#define LD2410_UART_TX 7
+#define LD2410_UART_RX 6
 #define LD2410_BAUD 256000
 #define LD2410_UART_PORT UART_NUM_1
 
@@ -119,6 +119,9 @@ typedef enum {
     SET_DETECTION_RANGE,
     SET_GATE_SENSITIVITY,
     SET_DETECTION_DURATION,
+    GET_DETECTION_RANGE,
+    GET_GATE_SENSITIVITY,
+    GET_DETECTION_DURATION,
     MAX_BLE_CMDS
 }BLE_COMMANDS;
 
