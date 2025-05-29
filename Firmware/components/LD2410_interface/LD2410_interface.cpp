@@ -2,16 +2,48 @@
 
 
 MyLD2410 sensor;
+unsigned long nextPrint = 0, printEvery = 1000;  // print every second
+
+
+void printValue(const uint8_t &val) {
+    printf(" ' ' %d" , val);
+}
+
+void printData(){
+    ESP_LOGW(TAG , "Presence Status- %s" , sensor.statusString());
+    
+    if (sensor.presenceDetected()) {
+        ESP_LOGW(TAG , "PRESENCE DETECTED !!  Distance: %ld cm ",sensor.detectedDistance());
+    }
+    
+    if (sensor.movingTargetDetected()) {
+        ESP_LOGW(TAG , "MOVING = Target Signal %d  at %ld cm" , sensor.movingTargetSignal(),  sensor.movingTargetDistance());
+        if (sensor.inEnhancedMode()) {
+            // ESP_LOGW(TAG , "signals->[" );
+            printf("[PRESENCE SENSOR] signals->[" );
+            sensor.getMovingSignals().forEach(printValue);
+            printf(" ] thresholds:[" );
+            sensor.getMovingThresholds().forEach(printValue);
+            printf("]\n" );
+         }
+    }
+}
 
 void LD2410Task(void *pvParameters){
     while(1){
 
+          if ((sensor.check() == MyLD2410::Response::DATA) && ((esp_timer_get_time() / 1000) > nextPrint)) {
+            nextPrint = (esp_timer_get_time() / 1000) + printEvery;
+            printData();
+        }
 
-
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
 }
+
+
+
 
 bool LD2410_init(){
     
@@ -49,8 +81,23 @@ bool LD2410_init(){
         return false;
     }
      ESP_LOGD( TAG," LD2410 rebooting  ");
+     
+    vTaskDelay(pdMS_TO_TICKS(2000)) ; // Delay for 1 second
+     
+    if(!sensor.enhancedMode()){
+         ESP_LOGE( TAG," LD2410 failed to enter enhanced mode  ");
+        
+        return false;
+    }
+    ESP_LOGD( TAG," LD2410 entering enhanced mode  ");
+     
+    // if(!sensor.requestReset()){
+    //      ESP_LOGE( TAG," LD2410 Factory Reset Failed  ");
+        
+    //     return false;
+    // }
+    //  ESP_LOGD( TAG," Factory Reset Success  ");
 
-    vTaskDelay(pdMS_TO_TICKS(2000)); // Delay for 1 second
     //  ESP_LOGD( TAG,"%s ", (sensor.getFirmware()).c_str());
 
     if(xTaskCreate(LD2410Task, "LD2410Task", 2048, NULL, 1, NULL) != pdPASS)
@@ -92,15 +139,18 @@ uint8_t getDetectionDuration(){
 
 void setDetectionRange(bool resolution , uint8_t number_of_gates){
    
-    uint8_t gateSplit = number_of_gates/2;
-    if(gateSplit ==0){
-        gateSplit=1;
-    }
-     if(!(sensor.setResolution(resolution) & sensor.setMaxGate(gateSplit,gateSplit,get_detection_duration()))){
+    // uint8_t gateSplit = number_of_gates/2;
+    // if(gateSplit ==0){
+    //     gateSplit=1;
+    // }
+     if(!(sensor.setResolution(resolution) & sensor.setMaxGate(number_of_gates,number_of_gates,sensor.getNoOneWindow()))){
+    //  if(!(sensor.setResolution(resolution) & sensor.setMaxGate(number_of_gates,number_of_gates,get_detection_duration()))){
+    //  if(!(sensor.setResolution(resolution) || sensor.setMaxMovingGate(number_of_gates) || sensor.setMaxStationaryGate(number_of_gates))){ //activates moving and stationary detection on x no of gates
+    //  if(!(sensor.setResolution(resolution) || sensor.setMaxMovingGate(number_of_gates) )){ //activates moving and stationary detection on x no of gates
          ESP_LOGE( TAG," LD2410 setDetectionRange failed  ");     
         return ;
     }
-     ESP_LOGD( TAG," LD2410 setDetectionRange Success  ");
+    ESP_LOGD( TAG," LD2410 setDetectionRange Success  ");
     
     getDetectionRange();
 }
@@ -137,17 +187,15 @@ SensitivityThresholds getGateSensitivities(){
     MyLD2410::ValuesArray movingThresValues;
     movingThresValues = sensor.getMovingThresholds();
     for(uint8_t i=0 ; i<movingThresValues.N ; i++){
-        sensThresh.moving.N= i ;
         sensThresh.moving.values[i]=movingThresValues.values[i];
-        ESP_LOGW( TAG," LD2410  moving Gate : %d  , moving Threshold Values :%d   ",sensThresh.moving.N ,sensThresh.moving.values[i] );
+        ESP_LOGW( TAG," LD2410   Gate : %d  , moving Threshold Value :%d   ",sensThresh.moving.N ,sensThresh.moving.values[i] );
 
     }
     MyLD2410::ValuesArray stationaryThresValues;
     stationaryThresValues = sensor.getStationaryThresholds();
     for(uint8_t i=0 ; i<stationaryThresValues.N ; i++){
-        sensThresh.stationary.N= i ;
-        sensThresh.stationary.values[i] = movingThresValues.values[i];
-        ESP_LOGW( TAG," LD2410  stationary Gate : %d  , stationary Threshold Values :%d   ",sensThresh.stationary.N ,sensThresh.stationary.values[i]);
+        sensThresh.stationary.values[i] = stationaryThresValues.values[i];
+        ESP_LOGW( TAG," LD2410   Gate : %d  , stationary Threshold Value :%d   ",sensThresh.stationary.N ,sensThresh.stationary.values[i]);
 
     }
 
