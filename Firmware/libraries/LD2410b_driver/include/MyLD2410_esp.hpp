@@ -147,7 +147,7 @@ private:
   byte headBufI = 0;
   // Stream *sensor;
   bool _debug = false;
-//   bool isDataValid();
+  bool isDataValid();
   bool readFrame();
   bool sendCommand(const byte *command);
   bool processAck();
@@ -215,7 +215,7 @@ private:
 //    * @brief Check whether the device is in enhanced mode
 //    * (continuously sends enhanced presence data)
 //    */
-//   bool inEnhancedMode();
+  bool inEnhancedMode();
 
 //   /**
 //    * @brief Get the status of the sensor:
@@ -230,7 +230,7 @@ private:
 //    *
 //    * @return byte
 //    */
-//   byte getStatus();
+  byte getStatus();
 
 //   /**
 //    * @brief Get the presence status as a c-string
@@ -244,71 +244,71 @@ private:
 //    * "Auto thresholds successful",
 //    * "Auto thresholds failed".
 //    */
-//   const char *statusString();
+  const char *statusString();
 
 //   /**
 //    * @brief Check whether presence was detected in the latest frame
 //    */
-//   bool presenceDetected();
+  bool presenceDetected();
 
 //   /**
 //    * @brief Check whether a stationary target was detected in the latest frame
 //    */
-//   bool stationaryTargetDetected();
+  bool stationaryTargetDetected();
 
 //   /**
 //    * @brief Get the distance to the stationary target in [cm]
 //    *
 //    * @return unsigned long - distance in [cm]
 //    */
-//   unsigned long stationaryTargetDistance();
+  unsigned long stationaryTargetDistance();
 
 //   /**
 //    * @brief Get the signal from the stationary target
 //    *
 //    * @return byte - signal value [0:100]
 //    */
-//   byte stationaryTargetSignal();
+  byte stationaryTargetSignal();
 
 //   /**
 //    * @brief Get the Stationary Signals object, if in enhanced mode
 //    *
 //    * @return const MyLD2410::ValuesArray& - the signals for each detection gate
 //    */
-//   const ValuesArray &getStationarySignals();
+  const ValuesArray &getStationarySignals();
 
 //   /**
 //    * @brief Check whether a moving target was detected in the latest frame
 //    */
-//   bool movingTargetDetected();
+  bool movingTargetDetected();
 
 //   /**
 //    * @brief Get the distance to the moving target in [cm]
 //    *
 //    * @return unsigned long - distance in [cm]
 //    */
-//   unsigned long movingTargetDistance();
+  unsigned long movingTargetDistance();
 
 //   /**
 //    * @brief Get the signal from the moving target
 //    *
 //    * @return byte - signal value [0:100]
 //    */
-//   byte movingTargetSignal();
+  byte movingTargetSignal();
 
 //   /**
 //    * @brief Get the Moving Signals object, if in enhanced mode
 //    *
 //    * @return const MyLD2410::ValuesArray& - the signals for each detection gate
 //    */
-//   const ValuesArray &getMovingSignals();
+  const ValuesArray &getMovingSignals();
 
 //   /**
 //    * @brief Get the detected distance
 //    *
 //    * @return unsigned long - distance in [cm]
 //    */
-//   unsigned long detectedDistance();
+  unsigned long detectedDistance();
 
 //   /**
 //    * @brief Get the Bluetooth MAC address as an array byte[6]
@@ -423,7 +423,7 @@ private:
 //    * @param enable [true]/false
 //    * @return true on success
 //    */
-//   bool enhancedMode(bool enable = true);
+  bool enhancedMode(bool enable = true);
 
 //   /**
 //    * @brief Request the current auxiliary configuration
@@ -535,7 +535,7 @@ private:
 //    * @param movingGate
 //    * @return true on success
 //    */
-//   bool setMaxMovingGate(byte movingGate);
+  bool setMaxMovingGate(byte movingGate);
 
 //   /**
 //    * @brief Set the maximum stationary gate
@@ -543,14 +543,14 @@ private:
 //    * @param stationaryGate
 //    * @return true on success
 //    */
-//   bool setMaxStationaryGate(byte stationaryGate);
+  bool setMaxStationaryGate(byte stationaryGate);
 
 //   /**
 //    * @brief Request reset to factory default parameters
 //    *
 //    * @return true on success
 //    */
-//   bool requestReset();
+  bool requestReset();
 
 //   /**
 //    * @brief Request reboot

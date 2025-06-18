@@ -123,7 +123,7 @@ bool MyLD2410::processData() {
         printf("process data readFrame FAILED\n\r"); 
         return false;
     }
-    printf("process data readFrame PASSED\n\r"); 
+    // printf("process data readFrame PASSED\n\r"); 
     
     //   if (_debug) {
     //     ESP_LOGI(TAG, "Processed data - Status: %" PRIu8 ", Moving Dist: %" PRIu16 "cm, Stationary Dist: %" PRIu16 "cm",
@@ -136,9 +136,9 @@ bool MyLD2410::processData() {
         printf("process data buffer ends with FAILED\n\r"); 
         return false;
     }
-    printf("process data buffer ends with passed\n\r"); 
-    printf("process data inBuf[2] : %x\n\r",inBuf[2]);
-    printf("process data inBuf[3] : %x\n\r",inBuf[3]);
+    // printf("process data buffer ends with passed\n\r"); 
+    // printf("process data inBuf[2] : %x\n\r",inBuf[2]);
+    // printf("process data inBuf[3] : %x\n\r",inBuf[3]);
     // Check frame type (Basic or Enhanced mode)
     if (((inBuf[2] == 1) || (inBuf[2] == 2)) && (inBuf[3] == 0xAA)) {
         // Update timestamp using ESP32's time function
@@ -491,6 +491,32 @@ bool MyLD2410::requestParameters()
   return configMode() && sendCommand(LD2410::param) && configMode(false);
 }
 
+bool MyLD2410::setMaxMovingGate(byte movingGate)
+{
+  if (!maxRange)
+    requestParameters();
+  if (movingThresholds.N == movingGate)
+    return true;
+  if (!noOne_window)
+    noOne_window = 5;
+  if (movingGate > 8)
+    movingGate = 8;
+  return setMaxGate(movingGate, stationaryThresholds.N, noOne_window);
+}
+
+bool MyLD2410::setMaxStationaryGate(byte stationaryGate)
+{
+  if (!maxRange)
+    requestParameters();
+  if (stationaryThresholds.N == stationaryGate)
+    return true;
+  if (!noOne_window)
+    noOne_window = 5;
+  if (stationaryGate > 8)
+    stationaryGate = 8;
+  return setMaxGate(movingThresholds.N, stationaryGate, noOne_window);
+}
+
 bool MyLD2410::setMaxGate(byte movingGate, byte staticGate, byte noOneWindow)
 {
   if (movingGate > 8)
@@ -506,11 +532,14 @@ bool MyLD2410::setMaxGate(byte movingGate, byte staticGate, byte noOneWindow)
   return configMode() && sendCommand(cmd) && sendCommand(LD2410::param) && configMode(false);
 }
 
+
 byte MyLD2410::getMaxGate(){
 
   requestParameters();
-  return(movingThresholds.N + stationaryThresholds.N);
-
+  if(movingThresholds.N == stationaryThresholds.N){
+    return(movingThresholds.N);
+  }
+  return 0;
 } 
 
 bool MyLD2410::setNoOneWindow(byte noOneWindow)
@@ -570,7 +599,7 @@ unsigned long MyLD2410::getRange_cm()
 uint16_t MyLD2410::getConfiguredRange(){
     
     requestParameters();
-    return((getMaxGate())*(getResolution()));
+    return((getMaxGate()+1)*(getResolution()));
 
 };
 
@@ -620,4 +649,97 @@ const MyLD2410::ValuesArray &MyLD2410::getStationaryThresholds()
   if (!maxRange)
     requestParameters();
   return stationaryThresholds;
+}
+
+
+const char *MyLD2410::statusString()
+{
+  return LD2410::tStatus[sData.status];
+}
+
+
+byte MyLD2410::getStatus()
+{
+  return (isDataValid()) ? sData.status : 0xFF;
+}
+
+
+bool MyLD2410::isDataValid()
+{
+  return ((esp_timer_get_time() / 1000) - sData.timestamp < dataLifespan);
+}
+
+
+bool MyLD2410::presenceDetected()
+{
+  return isDataValid() && (sData.status) && (sData.status < 4); // 1,2,3
+}
+
+
+unsigned long MyLD2410::detectedDistance()
+{
+  return sData.distance;
+}
+
+
+bool MyLD2410::movingTargetDetected()
+{
+  return isDataValid() && ((sData.status == 1) || (sData.status == 3)); // 1,3
+}
+
+byte MyLD2410::movingTargetSignal()
+{
+  return sData.mTargetSignal;
+}
+
+bool MyLD2410::inEnhancedMode()
+{
+  return isEnhanced;
+}
+
+const MyLD2410::ValuesArray &MyLD2410::getMovingSignals()
+{
+  return sData.mTargetSignals;
+}
+
+bool MyLD2410::stationaryTargetDetected()
+{
+  return isDataValid() && ((sData.status == 2) || (sData.status == 3)); // 2,3
+}
+
+byte MyLD2410::stationaryTargetSignal()
+{
+  return sData.sTargetSignal;
+}
+
+
+unsigned long MyLD2410::stationaryTargetDistance()
+{
+  return sData.sTargetDistance;
+}
+
+const MyLD2410::ValuesArray &MyLD2410::getStationarySignals()
+{
+  return sData.sTargetSignals;
+}
+
+bool MyLD2410::enhancedMode(bool enable)
+{
+  if (isConfig)
+    return sendCommand(((enable) ? LD2410::engOn : LD2410::engOff));
+  else
+    return configMode() && sendCommand(((enable) ? LD2410::engOn : LD2410::engOff)) && configMode(false);
+}
+
+unsigned long MyLD2410::movingTargetDistance()
+{
+  return sData.mTargetDistance;
+}
+
+
+bool MyLD2410::requestReset()
+{
+  if (isConfig)
+    return sendCommand(LD2410::reset) && sendCommand(LD2410::param) && sendCommand(LD2410::res);
+  return configMode() && sendCommand(LD2410::reset) && sendCommand(LD2410::param) && sendCommand(LD2410::res) && configMode(false);
 }

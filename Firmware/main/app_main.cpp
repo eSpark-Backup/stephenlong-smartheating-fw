@@ -127,7 +127,7 @@ void execute_command(void)
         ESP_LOGI(DEVICE_TAG, "Setting-  Gate resolution: %d , Activated Gates: %d ", *(uint8_t*)bleParameters[0],*(uint8_t*)bleParameters[1]);
             uint8_t param0 = *(uint8_t*)bleParameters[0];
             uint8_t param1 = *(uint8_t*)bleParameters[1];
-            if ((param0 != 0 && param0 != 1) || (param1 < 1 || param1 > 8)) {
+            if ((param0 != 0 && param0 != 1) || (param1 < 0 || param1 > 8)) {
                 ESP_LOGE(DEVICE_TAG, "Invalid Detection Range Parameters");
                 send_ble_uart_notification(ESP_FAIL, NULL, 0);
                 break;
@@ -141,7 +141,7 @@ void execute_command(void)
         bool failedCommand= false;
         for (int i = 0; i < *numberOfGates; i++) {
             ESP_LOGI(DEVICE_TAG, "Gate: %d, moving threshold: %d , stationary threshold:%d\n", gateParams[i].gate, gateParams[i].movingThreshold,gateParams[i].stationaryThreshold);
-            if((*numberOfGates) > 8 || (*numberOfGates) < 1 || gateParams[i].gate>7 ||gateParams[i].gate < 0 
+            if((*numberOfGates) > 8 || (*numberOfGates) < 1 || gateParams[i].gate>8 ||gateParams[i].gate < 0 
                                     || gateParams[i].movingThreshold >100 || gateParams[i].stationaryThreshold>100 ) {
                 ESP_LOGE(DEVICE_TAG, "Invalid Gate Sensitivity Parameters");
                 failedCommand= true;
@@ -231,8 +231,8 @@ extern "C" void app_main(void)
     button_init();
     
     LD2410_init();
-    ir_sensor_init();
-    heater_interface_init();
+    // ir_sensor_init();
+    // heater_interface_init();
 
     // set_heater_temp(27.5);
     // set_heater_mode(AUTO_MODE);
