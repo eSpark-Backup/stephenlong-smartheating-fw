@@ -23,7 +23,7 @@ extern "C" {
 #define HEATER_HIGH_IO              19
 #define HEATER_LOW_IO               18
 
-#define STATUS_LED_IO               8
+#define STATUS_LED_IO               11
 
 #define BUTTON_PAIRMODE_THRESHOLD   5
 #define BUTTON_FACTORY_RESET        30            // seconds
