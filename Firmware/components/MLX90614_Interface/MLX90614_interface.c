@@ -92,7 +92,7 @@ float get_operative_temp(void)
 
     CircularBuffer_Retrieve(&dataBufferTa, &Ta);
     CircularBuffer_Retrieve(&dataBufferTo, &To);
-    Toperative = (0.3 * Ta) + (0.7 * To);
+    Toperative = (0.5 * Ta) + (0.5 * To);
 
     ESP_LOGD(TAG, "Ta: %.2f, To: %.2f", Ta, To);
     ESP_LOGD(TAG, "Toperative: %.2f", Toperative);

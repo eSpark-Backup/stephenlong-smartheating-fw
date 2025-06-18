@@ -30,6 +30,7 @@ extern "C" {
 #define BUTTON_DEBOUNCE_MS          50
 // #define BUTTON_GPIO                 4               // <-- Your GPIO pin
 #define BUTTON_GPIO                 GPIO_NUM_4               // <-- Your GPIO pin
+#define GND_SW                      GPIO_NUM_10     //Ground switch
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
 
 #define AP_RECONN_ATTEMPTS          5
