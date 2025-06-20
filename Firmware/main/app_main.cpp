@@ -216,6 +216,7 @@ void button_init(void)
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_ANYEDGE        // You can use RISING/FALLING if needed
     };
+    gpio_set_level(GND_SW , true);
     gpio_config(&btn_cfg);
     // Install GPIO ISR service
     gpio_install_isr_service(0);  // Use ESP_INTR_FLAG_DEFAULT or 0
@@ -231,8 +232,8 @@ extern "C" void app_main(void)
     button_init();
     
     LD2410_init();
-    // ir_sensor_init();
-    // heater_interface_init();
+    ir_sensor_init();
+    heater_interface_init();
 
     // set_heater_temp(27.5);
     // set_heater_mode(AUTO_MODE);

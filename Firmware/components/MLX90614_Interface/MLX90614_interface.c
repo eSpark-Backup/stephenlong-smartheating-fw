@@ -33,6 +33,7 @@ temperature_sensor_handle_t temp_sensor = NULL;
 
 void ir_sensor_task(void * pvParameters)
 {
+    uint8_t restartCount =0;
     while(1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -42,15 +43,39 @@ void ir_sensor_task(void * pvParameters)
         uint16_t ir2 = 0;
         int error = ESP_OK;
 
+        
         CHECK_ERROR(MLX90614_GetTa(MLX90614_I2C_ADDR1, &Ta));
         CHECK_ERROR(MLX90614_GetTo(MLX90614_I2C_ADDR1, &To));
         CHECK_ERROR(MLX90614_GetIRdata1(MLX90614_I2C_ADDR1, &ir1));
         CHECK_ERROR(MLX90614_GetIRdata2(MLX90614_I2C_ADDR1, &ir2));
         
         ESP_LOGD(TAG "_Task", "Ta: %.2f, To: %.2f, IR1: %d, IR2: %d", Ta, To, ir1, ir2);
-
+        
+        NEGATIVE_FILTER_CHECK(To);
         NEGATIVE_FILTER_CHECK(Ta);
-        NEGATIVE_FILTER_CHECK(To); 
+
+        
+        if(((Ta > MAX_TEMP_VAL) || (Ta < MIN_TEMP_VAL) || (To > MAX_TEMP_VAL) || (To < MIN_TEMP_VAL)) 
+                && restartCount <SENSOR_BOARD_RESTART_COUNT)
+        {
+            ESP_LOGW(TAG "_Task", "Invalid Values Detected !");
+            ESP_LOGW(TAG "_Task","Restarting Sensor Board");
+            gpio_set_level(GND_SW , false);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            gpio_set_level(GND_SW , true);
+            vTaskDelay(pdMS_TO_TICKS(800));
+            restartCount++;
+              // Initialize the circular buffers
+            CircularBuffer_Init(&dataBufferTa);
+            CircularBuffer_Init(&dataBufferTo);    
+            MLX90614_SMBusInit(MLX90614_SDA_IO, MLX90614_SCL_IO, MLX90614_FREQ, MLX90614_I2C_NUM);
+            internal_temp_sensor_init();
+            /* GND switch High*/
+        }
+        else if(restartCount >= SENSOR_BOARD_RESTART_COUNT)
+        {
+            ESP_LOGE(TAG "_Task","Sensor FAILURE!");
+        }
     }
     vTaskDelete( NULL );
 }

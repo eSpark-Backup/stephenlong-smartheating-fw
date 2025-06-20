@@ -18,6 +18,9 @@ extern "C" {
 #define IR_SENSOR_I2C_ADDR1         0x5A         // Default sensor slave address
 #define IR_SENSOR_SDA_IO            21
 #define IR_SENSOR_SCL_IO            22
+#define MAX_TEMP_VAL                125.00f
+#define MIN_TEMP_VAL                -40.00f
+#define SENSOR_BOARD_RESTART_COUNT   10
 
 #define MOTION_SENSOR_IO            GPIO_NUM_23
 #define HEATER_HIGH_IO              19

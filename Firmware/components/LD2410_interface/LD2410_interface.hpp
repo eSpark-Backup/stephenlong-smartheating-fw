@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "Comm_Interface.h"
+#include "driver/gpio.h"
 
 
 #define TAG "PRESENCE_SENSOR"
@@ -30,6 +31,7 @@ typedef struct {
 }SensitivityThresholds;
 
 bool LD2410_init();
+bool sensorSetup();
 void setDetectionDuration(uint8_t durationVal);
 uint8_t getDetectionDuration();
 void setDetectionRange(bool resolution , uint8_t number_of_gates);

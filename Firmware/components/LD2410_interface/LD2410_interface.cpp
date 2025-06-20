@@ -41,8 +41,48 @@ void LD2410Task(void *pvParameters){
     }
 
 }
+void groundSwitchCheck()
+{
+    if(!gpio_get_level(GND_SW))
+    {   
+        gpio_set_level(GND_SW , true);
+    }
+}
 
+bool sensorSetup()
+{
+    if(!sensor.begin()){
+         ESP_LOGE( TAG," LD2410 failed to initialize  ");
+        
+        return false;
+    }    
+    if(!sensor.configMode()){
+         ESP_LOGE( TAG," LD2410 failed to enter config mode  ");
+        
+        return false;
+    }    
+    if(!sensor.requestBToff()){
+         ESP_LOGE( TAG," LD2410 BLE turned off FALIED  ");
+        
+        return false;
+    }
+    
+    if(!sensor.requestReboot()){
+         ESP_LOGE( TAG," LD2410 rebooting failedn ");
+        
+        return false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(2000)) ; // Delay for 1 second
 
+    if(!sensor.enhancedMode()){
+         ESP_LOGE( TAG," LD2410 failed to enter enhanced mode  ");
+         
+         return false;
+    }
+        
+    return true;
+
+}
 
 
 bool LD2410_init(){
@@ -50,47 +90,18 @@ bool LD2410_init(){
     int ret =sensor.uartInit(LD2410_UART_PORT , LD2410_UART_TX , LD2410_UART_RX, LD2410_BAUD);
     if(ret!= ESP_OK){    
          ESP_LOGE( TAG," uart initialization failed with code: %d  ", ret);
+         return false;
+    }
+    ESP_LOGD( TAG," uart initialization success: %d  ", ret);
+    
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
         return false;
     }
-     ESP_LOGD( TAG," uart initialization success: %d  ", ret);
+    ESP_LOGD( TAG," LD2410 Setup Successfull ");
 
-    if(!sensor.begin()){
-         ESP_LOGE( TAG," LD2410 failed to initialize  ");
-        
-        return false;
-    }
-     ESP_LOGD( TAG," LD2410 initialized  ");
 
-    if(!sensor.configMode()){
-         ESP_LOGE( TAG," LD2410 failed to enter config mode  ");
-        
-        return false;
-    }
-     ESP_LOGD( TAG," LD2410 entering config mode  ");
-
-    if(!sensor.requestBToff()){
-         ESP_LOGE( TAG," LD2410 BLE turned off FALIED  ");
-        
-        return false;
-    }
-     ESP_LOGD( TAG," LD2410 BLE turned off successfull  ");
-
-    if(!sensor.requestReboot()){
-         ESP_LOGE( TAG," LD2410 rebooting failedn ");
-        
-        return false;
-    }
-     ESP_LOGD( TAG," LD2410 rebooting  ");
-     
-    vTaskDelay(pdMS_TO_TICKS(2000)) ; // Delay for 1 second
-     
-    if(!sensor.enhancedMode()){
-         ESP_LOGE( TAG," LD2410 failed to enter enhanced mode  ");
-        
-        return false;
-    }
-    ESP_LOGD( TAG," LD2410 entering enhanced mode  ");
-     
     // if(!sensor.requestReset()){
     //      ESP_LOGE( TAG," LD2410 Factory Reset Failed  ");
         
@@ -106,15 +117,21 @@ bool LD2410_init(){
         set_device_status(1, ERROR);
         return false;
     }
-    getDetectionRange();
-    getDetectionDuration();
-    getGateSensitivities();
+    // getDetectionRange();
+    // getDetectionDuration();
+    // getGateSensitivities();
 
 
     return true;
 }
 
-void setDetectionDuration(uint8_t durationVal){
+void setDetectionDuration(uint8_t durationVal)
+{
+    groundSwitchCheck();
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
+    }
 
     set_detection_duration(durationVal);
 
@@ -129,7 +146,13 @@ void setDetectionDuration(uint8_t durationVal){
 
 }
 
-uint8_t getDetectionDuration(){
+uint8_t getDetectionDuration()
+{
+    groundSwitchCheck();
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
+    }
 
     uint8_t duration = sensor.getNoOneWindow();
     ESP_LOGW( TAG," LD2410 noone window value:%x   ",duration );
@@ -137,7 +160,13 @@ uint8_t getDetectionDuration(){
 
 }
 
-void setDetectionRange(bool resolution , uint8_t number_of_gates){
+void setDetectionRange(bool resolution , uint8_t number_of_gates)
+{
+    groundSwitchCheck();
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
+    }
    
     // uint8_t gateSplit = number_of_gates/2;
     // if(gateSplit ==0){
@@ -155,7 +184,13 @@ void setDetectionRange(bool resolution , uint8_t number_of_gates){
     getDetectionRange();
 }
 
-RangeParams getDetectionRange(){
+RangeParams getDetectionRange()
+{
+    groundSwitchCheck();
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
+    }
     RangeParams rangeParameters;
     rangeParameters.resolutionMeters = sensor.getResolution();
     rangeParameters.activeGates = sensor.getMaxGate();
@@ -166,8 +201,13 @@ RangeParams getDetectionRange(){
     return(rangeParameters);
 }
 
-void setGateSensitivities(uint8_t gateNumber , uint8_t movingThres , uint8_t stationaryThres){
-    
+void setGateSensitivities(uint8_t gateNumber , uint8_t movingThres , uint8_t stationaryThres)
+{
+    groundSwitchCheck();
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
+    }
    
     if(!(sensor.setGateParameters(gateNumber,movingThres,stationaryThres))){
          ESP_LOGE( TAG," LD2410 setGateParameters failedn  ");     
@@ -180,8 +220,13 @@ void setGateSensitivities(uint8_t gateNumber , uint8_t movingThres , uint8_t sta
 
 }
 
-SensitivityThresholds getGateSensitivities(){
-
+SensitivityThresholds getGateSensitivities()
+{
+    groundSwitchCheck();
+    if(!sensorSetup())
+    {
+        ESP_LOGE( TAG," LD2410 Setup Failed");         
+    }
     SensitivityThresholds sensThresh;
 
     MyLD2410::ValuesArray movingThresValues;
