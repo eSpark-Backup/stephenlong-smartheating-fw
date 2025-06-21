@@ -90,7 +90,8 @@ esp_err_t device_data_set(uint8_t op)
     if (err != ESP_OK)
     {
         ESP_LOGE(DEVICE_TAG, "Failed to open NVS: %s", esp_err_to_name(err));
-        set_device_status(1, ERROR);
+        set_device_status(1, ERROR);      
+        set_led_effect(LED_EFFECT_BLINK, RED ,NO_SPEED );
         return err;
     }
     if(op == 0)
@@ -118,7 +119,8 @@ esp_err_t device_data_set(uint8_t op)
 }
 
 esp_err_t reset_device_and_erase_nvs()
-{
+{   
+    set_led_effect(LED_EFFECT_BLINK, PURPLE ,LED_SPEED_FAST );
     esp_err_t err;
 
     // Erase all NVS partitions

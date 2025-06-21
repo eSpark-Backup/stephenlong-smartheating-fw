@@ -21,9 +21,12 @@
             if (error != ESP_OK) {                          \
                 ESP_LOGE(TAG, "Error: %d", error);          \
                 set_device_status(1, ERROR_IR_SENSOR);      \
+                set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW ); \
                 break;                                      \
             }                                               \
-            else { set_device_status(0, ERROR_IR_SENSOR); } \
+            else { set_device_status(0, ERROR_IR_SENSOR);   \
+                 set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );\
+                }                                                         \
         } while (0);                                        \
         if(error != ESP_OK) continue;
 
@@ -74,6 +77,7 @@ void ir_sensor_task(void * pvParameters)
         }
         else if(restartCount >= SENSOR_BOARD_RESTART_COUNT)
         {
+            set_led_effect(LED_EFFECT_BLINK, YELLOW ,LED_SPEED_SLOW );
             ESP_LOGE(TAG "_Task","Sensor FAILURE!");
         }
     }
@@ -93,6 +97,7 @@ esp_err_t ir_sensor_init(void)
     if(xTaskCreate(ir_sensor_task, "IR_Sensor_Task", 2048, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
+        set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
         set_device_status(1, ERROR);
         return ESP_FAIL;
     }

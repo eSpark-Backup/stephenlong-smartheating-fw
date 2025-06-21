@@ -114,12 +114,13 @@ bool LD2410_init(){
     if(xTaskCreate(LD2410Task, "LD2410Task", 2048, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
-        set_device_status(1, ERROR);
+        set_device_status(1, ERROR);      
+        set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
         return false;
     }
-    // getDetectionRange();
-    // getDetectionDuration();
-    // getGateSensitivities();
+    getDetectionRange();
+    getDetectionDuration();
+    getGateSensitivities();
 
 
     return true;

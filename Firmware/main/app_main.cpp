@@ -15,16 +15,28 @@
 #include "LD2410_interface.hpp"
 
 
+TaskHandle_t xButtonTaskHandle = NULL;
 
+ButtonFlags buttonflag={
+        false,
+        false,
+        false,
+        false
+};
 static int64_t press_start_time = 0;
+static int64_t press_duration ;
+
 static void IRAM_ATTR button_isr_handler(void *arg)
 {
     static int64_t last_isr_time = 0;
     int64_t now = esp_timer_get_time(); // microseconds
 
-    // Debounce
-    if (now - last_isr_time < BUTTON_DEBOUNCE_MS * 1000) return;
-        last_isr_time = now;
+    // // Debounce
+    if (now - last_isr_time < BUTTON_DEBOUNCE_MS * 1000) 
+    {
+        return;
+    }
+    last_isr_time = now;
 
     if (gpio_get_level(BUTTON_GPIO) == 0)
     {
@@ -34,20 +46,24 @@ static void IRAM_ATTR button_isr_handler(void *arg)
     else
     {
         // Button released (rising edge)
-        int64_t press_duration = now - press_start_time;
+        press_duration = now - press_start_time;
 
         if (press_duration >= BUTTON_FACTORY_RESET * 1000000) {
-            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nPerforming factory reset", press_duration / 1000);
-            reset_device_and_erase_nvs();
-        } else if (press_duration >= BUTTON_PAIRMODE_THRESHOLD * 1000000) {
-            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nStarting pairmode", press_duration / 1000);
-            start_softap_provisioning();
-        } else {
-            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nPowering off", press_duration / 1000);
-            esp_restart();
-        }
+            buttonflag.factoryResetFlag= true;
+        } 
+        else if (press_duration >= BUTTON_PAIRMODE_THRESHOLD * 1000000) {
+            buttonflag.softAPFlag= true;
+        } 
+        else if (press_duration >= BLE_PAIRMODE_THHRESH * 1000000) {
+            buttonflag.BLEPairFlag= true;
+        } 
+        else {
+            buttonflag.powerOffFlag= true;
+         }
     }
 }
+
+
 
 void execute_command(void)
 {
@@ -205,10 +221,51 @@ void execute_command(void)
     uart_cmd_handler_flag = false;
 }
 
+void button_task(void * pvParameters)
+{
+    while(1)
+    {
+        if(buttonflag.factoryResetFlag)
+        {
+            buttonflag.factoryResetFlag=false;
+            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nPerforming factory reset", press_duration / 1000);
+            if(reset_device_and_erase_nvs() != ESP_OK)
+            {
+                ESP_LOGE(GPIO_TAG ISR_TAG, "Factory Reset Failed");
+                set_led_effect(LED_EFFECT_BLINK, RED , LED_SPEED_SLOW );
+            }
+            esp_restart();
+            set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
+        }
+        else if(buttonflag.softAPFlag)
+        {
+            buttonflag.softAPFlag=false;
+            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nStarting pairmode", press_duration / 1000);
+            start_softap_provisioning();
+
+        }
+        else if(buttonflag.BLEPairFlag)
+        {
+            buttonflag.BLEPairFlag=false;
+            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nStarting BLE pairmode", press_duration / 1000);
+            remove_bond_devices();
+            startBLEAdvert();
+        }
+        else if(buttonflag.powerOffFlag)
+        {
+            buttonflag.powerOffFlag=false;
+            ESP_LOGI(GPIO_TAG ISR_TAG, "Press duration = %lld ms\nPowering off", press_duration / 1000);
+            esp_restart();
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Delay for 1 second
+    }
+    vTaskDelete(xButtonTaskHandle);
+}
 
 
 void button_init(void)
 {
+
     gpio_config_t btn_cfg = {
         .pin_bit_mask = GPIO_PIN_MASK(BUTTON_GPIO),
         .mode = GPIO_MODE_INPUT,
@@ -216,13 +273,18 @@ void button_init(void)
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_ANYEDGE        // You can use RISING/FALLING if needed
     };
+
     gpio_set_level(GND_SW , true);
     gpio_config(&btn_cfg);
     // Install GPIO ISR service
     gpio_install_isr_service(0);  // Use ESP_INTR_FLAG_DEFAULT or 0
     gpio_isr_handler_add(BUTTON_GPIO, button_isr_handler, (void*)(uintptr_t)BUTTON_GPIO);
-    
     ESP_LOGI(GPIO_TAG, "ISR set up on GPIO %d", BUTTON_GPIO);
+
+    if(xTaskCreate(button_task, "Button_Task", 4096, NULL, 1, &xButtonTaskHandle) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create Button Task");
+    }
 }
 
 extern "C" void app_main(void)
@@ -230,6 +292,7 @@ extern "C" void app_main(void)
     status_led_init();
     device_data_init();
     button_init();
+
     
     LD2410_init();
     ir_sensor_init();
@@ -240,17 +303,17 @@ extern "C" void app_main(void)
     
     comm_init();
 
-    if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
-    {
-        ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
-        wifi_init_sta(device_data.ssid, device_data.password);
-    }
-    else
-    {
-        ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
-        start_softap_provisioning();
-        ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
-    }
+    // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
+    // {
+    //     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+    //     wifi_init_sta(device_data.ssid, device_data.password);
+    // }
+    // else
+    // {
+    //     ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
+    //     start_softap_provisioning();
+    //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
+    // }
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)

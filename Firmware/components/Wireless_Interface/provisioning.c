@@ -9,6 +9,7 @@ uint16_t temp_char_handle = 0;
 // SoftAP
 void start_softap_provisioning(void)
 {
+    set_led_effect(LED_EFFECT_BREATHING, BLUE ,LED_SPEED_FAST );
     // gpio_isr_handler_flag = false;
     wifi_config_t wifi_config = {
         .ap = {
@@ -22,6 +23,7 @@ void start_softap_provisioning(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG WIFI_TAG, "SoftAP mode started. Go to http://192.168.4.1/");
+    set_led_effect(LED_EFFECT_BLINK, BLUE ,LED_SPEED_SLOW );
     start_webserver();
 
     set_device_status(1, PAIRING);
@@ -123,6 +125,7 @@ void event_handler(void *arg, esp_event_base_t event_base,
             start_softap_provisioning();
         }
         else{
+            set_led_effect(LED_EFFECT_BLINK, YELLOW ,LED_SPEED_SLOW );
             esp_wifi_connect();
             s_retry_num++;
             ESP_LOGI(TAG WIFI_TAG, "connect to the AP fail");
@@ -136,6 +139,8 @@ void event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG WIFI_TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
 
+        set_led_effect(LED_EFFECT_BLINK, GREEN ,LED_SPEED_SLOW );
+        set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
         set_device_status(0, PAIRING);
     }
 }

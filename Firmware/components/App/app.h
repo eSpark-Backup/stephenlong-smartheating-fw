@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defines.h"
+#include "status_led.h"
 
 #ifdef __cplusplus
 extern "C" {

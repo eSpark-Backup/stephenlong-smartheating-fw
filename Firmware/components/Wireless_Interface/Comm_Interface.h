@@ -1,6 +1,8 @@
 #pragma once
 
 #include "defines.h"
+#include "ble.h"
+#include "status_led.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatts_api.h"
 #include "esp_bt_defs.h"
@@ -32,6 +34,9 @@ extern prepare_type_env_t a_prepare_write_env;
 void ble_command_task(void * pvParameters);
 
 void comm_init(void);
+void display_bonded_devices();
+void remove_bond_devices();
+void startBLEAdvert();
 void start_ble(void);
 
 // BLE

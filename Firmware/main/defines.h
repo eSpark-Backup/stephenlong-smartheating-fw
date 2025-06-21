@@ -27,12 +27,14 @@ extern "C" {
 #define HEATER_LOW_IO               18
 
 #define STATUS_LED_IO               11
+// #define STATUS_LED_IO               GPIO_NUM_8
 
 #define BUTTON_PAIRMODE_THRESHOLD   5
+#define BLE_PAIRMODE_THHRESH        3
 #define BUTTON_FACTORY_RESET        30            // seconds
 #define BUTTON_DEBOUNCE_MS          50
-// #define BUTTON_GPIO                 4               // <-- Your GPIO pin
-#define BUTTON_GPIO                 GPIO_NUM_4               // <-- Your GPIO pin
+
+#define BUTTON_GPIO                 GPIO_NUM_2               // <-- Your GPIO pin
 #define GND_SW                      GPIO_NUM_10     //Ground switch
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
 
@@ -71,6 +73,7 @@ extern "C" {
 #define GATTS_CHAR_VAL_LEN_MAX      0x40
 #define PREPARE_BUF_MAX_SIZE        1024
 #define CONFIG_SET_RAW_ADV_DATA     0
+#define BLE_PAIR_ENCRYPTION_KEY     16
 
 #define NVS_NAMESPACE_DEVICEDATA   "device_data"
 #define NVS_NAMESPACE_WIFIDATA     "wifi_storage"
@@ -151,8 +154,20 @@ typedef struct
     uint8_t duration_val;
 } device_data_t;
 
+typedef struct 
+{
+    bool factoryResetFlag;
+    bool softAPFlag;
+    bool BLEPairFlag;
+    bool powerOffFlag;
+}ButtonFlags;
+
+
+
 const char* get_enum_name(ENUM_TYPE type, int value);
 void set_device_status(uint8_t op, int bitMask);
+// void set_led_effect(led_effect_t effect , COLORS colorSelection , EFFECT_SPEED effectSPEED);
+// led_effect_t get_current_led_effect(void);
 void execute_command(void);
 
 

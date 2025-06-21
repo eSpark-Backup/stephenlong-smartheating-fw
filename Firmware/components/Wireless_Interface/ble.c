@@ -1,5 +1,6 @@
-#include "defines.h"
-#include "Comm_Interface.h"
+#include "ble.h"
+
+
 
 #define COMPANY_ID_TO_BYTES(id)  ((uint8_t)((id) & 0xFF)), ((uint8_t)(((id) >> 8) & 0xFF))
 #define COMPANY_ID_LEN           2
@@ -8,6 +9,7 @@ uint8_t adv_config_done = 0;
 static esp_gatt_char_prop_t a_property = 0;
 prepare_type_env_t a_prepare_write_env;
 
+
 const uint8_t company_id[2] = {COMPANY_ID_TO_BYTES(COMPANY_ID)};
 const uint8_t prov_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E, 0x00, 0x10, 0xA3, 0xB5, 0x7E, 0x00, 0x40, 0x7E};
 const uint8_t uart_service_uuid[16] = {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E, 0x00, 0x20, 0xA3, 0xB5, 0x7E, 0x00, 0x40, 0x7E};
@@ -15,14 +17,7 @@ const uint8_t uart_tx_uuid[16] =      {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3,
 const uint8_t uart_rx_uuid[16] =      {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E, 0x02, 0x20, 0xA3, 0xB5, 0x7E, 0x00, 0x40, 0x7E};
 const uint8_t prov_chr_uuid[16] =     {0x9E, 0xCA, 0xDC, 0x24, 0x0E, 0xE5, 0xC3, 0x0E, 0x01, 0x10, 0xA3, 0xB5, 0x7E, 0x00, 0x40, 0x7E};
 
-static esp_ble_adv_params_t adv_params = {
-    .adv_int_min = 0x20,
-    .adv_int_max = 0x40,
-    .adv_type = ADV_TYPE_IND,
-    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
-    .channel_map = ADV_CHNL_ALL,
-    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
-};
+
 
 #if CONFIG_SET_RAW_ADV_DATA
 static uint8_t raw_adv_data[] = {
@@ -152,10 +147,33 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
                  param->update_conn_params.latency,
                  param->update_conn_params.timeout);
         break;
+    
+    case ESP_GAP_BLE_SEC_REQ_EVT:
+            // Central requested pairing
+        esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
+        break;
+    
+    case ESP_GAP_BLE_AUTH_CMPL_EVT:
+        if (param->ble_security.auth_cmpl.success) {
+            printf(" Paired successfully with: %02x:%02x:%02x:%02x:%02x:%02x\n",
+                param->ble_security.auth_cmpl.bd_addr[0],
+                param->ble_security.auth_cmpl.bd_addr[1],
+                param->ble_security.auth_cmpl.bd_addr[2],
+                param->ble_security.auth_cmpl.bd_addr[3],
+                param->ble_security.auth_cmpl.bd_addr[4],
+                param->ble_security.auth_cmpl.bd_addr[5]);
+        } else {
+            printf(" Pairing failed\n");
+        }
+
+        break;
+
     default:
         break;
     }
 }
+
+
 
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {

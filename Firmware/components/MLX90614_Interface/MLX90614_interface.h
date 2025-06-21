@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "esp_err.h"
 #include "driver/gpio.h"
+#include "status_led.h"
 
 
 #ifdef __cplusplus

@@ -15,7 +15,8 @@ char* bleParameters[2] = {NULL, NULL};
 char *numberOfGates= NULL;
 
 GateParameters* gateParams = NULL;
-
+static int bond_dev_num = 0;
+static esp_ble_bond_dev_t *bond_dev_list = NULL;
 
 
 bool uart_cmd_handler_flag = false;
@@ -73,11 +74,45 @@ void comm_init(void)
     // Create the task for the IR sensor
     if(xTaskCreate(ble_command_task, "ble_command_task", 4096, NULL, 1, NULL) != pdPASS)
     {
-        ESP_LOGE(TAG, "Failed to create IR sensor task");
+        ESP_LOGE(TAG, "Failed to create ble_command_task  task");
+        set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
         set_device_status(1, ERROR);
         return;
     }
     ESP_LOGD(TAG, "ble_command_task created successfully");
+}
+
+void startBLEAdvert()
+{
+    esp_ble_gap_start_advertising(&adv_params);
+}
+
+void display_bonded_devices()
+{
+    // startAdvertising();       
+    // First get count of bonded devices
+    bond_dev_num = esp_ble_get_bond_device_num();
+    if (bond_dev_num > 0) {
+        bond_dev_list = (esp_ble_bond_dev_t *)malloc(sizeof(esp_ble_bond_dev_t) * bond_dev_num);
+        esp_ble_get_bond_device_list(&bond_dev_num, bond_dev_list);
+         for (int i = 0; i < bond_dev_num; i++) {
+            ESP_LOGI(TAG, "Bonded device: %s", bond_dev_list[i].bd_addr);
+        }
+        free(bond_dev_list);
+    }
+}
+
+void remove_bond_devices()
+{
+    int dev_num = esp_ble_get_bond_device_num();
+    esp_ble_bond_dev_t *bonded_devices = (esp_ble_bond_dev_t *)malloc(sizeof(esp_ble_bond_dev_t) * dev_num);
+    esp_ble_get_bond_device_list(&dev_num, bonded_devices);
+
+    for (int i = 0; i < dev_num; i++) {
+        esp_ble_remove_bond_device(bonded_devices[i].bd_addr);
+    }
+    free(bonded_devices);
+
 }
 
 void start_ble(void)
@@ -86,6 +121,11 @@ void start_ble(void)
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_REQ_SC_BOND;   // "Just Works" secure pairing
+    esp_ble_io_cap_t iocap = ESP_IO_CAP_NONE;  
+    uint8_t key_size = BLE_PAIR_ENCRYPTION_KEY; // max encryption key size
+    uint8_t key_mask = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret)
     {
@@ -178,6 +218,44 @@ void start_ble(void)
     if (local_mtu_ret)
     {
         ESP_LOGE(GATTS_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
+    }
+    
+    display_bonded_devices();
+    esp_err_t ble_sec_parm_ret;
+
+    // Set authentication requirement (e.g. Just Works, MITM, etc.)
+    ble_sec_parm_ret = esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
+    if (ble_sec_parm_ret != ESP_OK) 
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to set AUTHEN_REQ_MODE: 0x%X", ble_sec_parm_ret);
+    }
+
+    // Set IO capabilities (e.g. NONE, DISPLAY_ONLY, etc.)
+    ble_sec_parm_ret = esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &iocap, sizeof(iocap));
+    if (ble_sec_parm_ret != ESP_OK) 
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to set IOCAP_MODE: 0x%X", ble_sec_parm_ret);
+    }
+
+    // Set maximum encryption key size
+    ble_sec_parm_ret = esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
+    if (ble_sec_parm_ret != ESP_OK) 
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to set MAX_KEY_SIZE: 0x%X", ble_sec_parm_ret);
+    }
+
+    // Set initiator key mask (what your device sends)
+    ble_sec_parm_ret = esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &key_mask, sizeof(key_mask));
+    if (ble_sec_parm_ret != ESP_OK) 
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to set INIT_KEY mask: 0x%X", ble_sec_parm_ret);
+    }
+
+    // Set responder key mask (what your device accepts)
+    ble_sec_parm_ret = esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &key_mask, sizeof(key_mask));
+    if (ble_sec_parm_ret != ESP_OK) 
+    {
+        ESP_LOGE(GATTS_TAG, "Failed to set RSP_KEY mask: 0x%X", ble_sec_parm_ret);
     }
 }
 
