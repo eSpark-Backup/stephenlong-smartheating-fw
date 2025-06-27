@@ -20,6 +20,7 @@
         do {                                                \
             if (error != ESP_OK) {                          \
                 ESP_LOGE(TAG, "Error: %d", error);          \
+                setTempValues(-1, -1);                      \
                 set_device_status(1, ERROR_IR_SENSOR);      \
                 set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW ); \
                 break;                                      \
@@ -33,10 +34,14 @@
 DEVICE_STATUS* _device_status = NULL; // Pointer to device status
 circular_buffer_t dataBufferTa, dataBufferTo;            // circular buffer for Tambient and Tobject data
 temperature_sensor_handle_t temp_sensor = NULL;
+MLX_Temp irTemp;
 
 void ir_sensor_task(void * pvParameters)
 {
     uint8_t restartCount =0;
+    irTemp.amb_temp = -1;
+    irTemp.obj_temp = -1;
+
     while(1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -53,6 +58,7 @@ void ir_sensor_task(void * pvParameters)
         CHECK_ERROR(MLX90614_GetIRdata2(MLX90614_I2C_ADDR1, &ir2));
         
         ESP_LOGD(TAG "_Task", "Ta: %.2f, To: %.2f, IR1: %d, IR2: %d", Ta, To, ir1, ir2);
+        setTempValues(Ta, To);
         
         NEGATIVE_FILTER_CHECK(To);
         NEGATIVE_FILTER_CHECK(Ta);
@@ -82,6 +88,17 @@ void ir_sensor_task(void * pvParameters)
         }
     }
     vTaskDelete( NULL );
+}
+
+void setTempValues(float a, float b)
+{
+    irTemp.amb_temp = a;
+    irTemp.obj_temp = b;
+}
+
+MLX_Temp getTempValues()
+{
+    return irTemp;
 }
 
 esp_err_t ir_sensor_init(void)

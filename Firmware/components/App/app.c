@@ -174,3 +174,36 @@ DEVICE_MODE get_device_mode(void)
 {
     return device_data.mode;
 }
+
+esp_err_t get_device_credentials(char *token)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READONLY, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(HTTPS_TAG, "No saved credentials found");
+        return err;
+    }
+
+    size_t length = CREDENTIAL_VALUE;
+    nvs_get_str(nvs, "token", token, &length);
+    nvs_close(nvs);
+    return ESP_OK;
+}
+
+esp_err_t save_device_credentials(const char *token)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(HTTPS_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    nvs_set_str(nvs, "token", token);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    ESP_LOGI(HTTPS_TAG, "HTTPS Provisioning Token saved");
+    return ESP_OK;
+}
