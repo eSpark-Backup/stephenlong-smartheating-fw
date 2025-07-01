@@ -37,11 +37,11 @@ void thingsBoard_task(void *pvParameters)
     int telemetryTime = NORMAL_TEL_TIME;
     unsigned long presenceDetectedTime = 0;
     bool isDeviceProvisioned = false;
-    char tokenKey[CREDENTIAL_VALUE];  // Buffer for token
+    char tokenKey[CREDENTIAL_VALUE] = {0};  // Buffer for token
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
-    char mac_str[18];
+    char mac_str[18] = {0};
     snprintf(mac_str, sizeof(mac_str), "%02X%02X%02X%02X%02X%02X",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
@@ -120,6 +120,7 @@ esp_err_t provision_device(char *access_token_out, size_t token_size, char *mac_
     };
     config.cert_pem = ca_cert_pem_start;
     config.transport_type = HTTP_TRANSPORT_OVER_SSL;
+    config.timeout_ms = 10000;
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
     char post_data[512];
@@ -189,6 +190,7 @@ void send_telemetry(const char *access_token, LD2410_Data presData)
     };
     config.cert_pem = ca_cert_pem_start;
     config.transport_type = HTTP_TRANSPORT_OVER_SSL;
+    config.timeout_ms = 10000;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
 

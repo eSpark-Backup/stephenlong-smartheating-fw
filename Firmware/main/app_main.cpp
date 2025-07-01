@@ -314,6 +314,8 @@ extern "C" void app_main(void)
         start_softap_provisioning();
         ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
     }
+    
+    // delete_device_credentials();
     // save_device_credentials("E99uGHcZXhZly9FgjRBN");
     thingsBoard_init();
 }
