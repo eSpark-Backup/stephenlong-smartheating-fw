@@ -13,7 +13,7 @@
 #include "Status_led.h"
 #include "Comm_Interface.h"
 #include "LD2410_interface.hpp"
-
+#include "ThingsBoard_interface.h"
 
 TaskHandle_t xButtonTaskHandle = NULL;
 
@@ -303,17 +303,21 @@ extern "C" void app_main(void)
     
     comm_init();
 
-    // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
-    // {
-    //     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
-    //     wifi_init_sta(device_data.ssid, device_data.password);
-    // }
-    // else
-    // {
-    //     ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
-    //     start_softap_provisioning();
-    //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
-    // }
+    if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
+    {
+        ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+        wifi_init_sta(device_data.ssid, device_data.password);
+    }
+    else
+    {
+        ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
+        start_softap_provisioning();
+        ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
+    }
+    
+    // delete_device_credentials();
+    // save_device_credentials("E99uGHcZXhZly9FgjRBN");
+    thingsBoard_init();
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)

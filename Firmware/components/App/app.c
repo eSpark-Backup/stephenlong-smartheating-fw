@@ -174,3 +174,81 @@ DEVICE_MODE get_device_mode(void)
 {
     return device_data.mode;
 }
+
+esp_err_t get_device_credentials(char *token)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READONLY, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(HTTPS_TAG, "No saved credentials found");
+        return err;
+    }
+
+    size_t length = CREDENTIAL_VALUE;
+    err = nvs_get_str(nvs, "token", token, &length);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(HTTPS_TAG, "No saved credentials found (nvs_get_str)");
+        nvs_close(nvs);
+        return err;
+    }
+
+    nvs_close(nvs);
+    return ESP_OK;
+}
+
+
+esp_err_t save_device_credentials(const char *token)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(HTTPS_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    nvs_set_str(nvs, "token", token);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    ESP_LOGI(HTTPS_TAG, "HTTPS Provisioning Token saved");
+    return ESP_OK;
+}
+
+esp_err_t delete_device_credentials()
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(HTTPS_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_erase_key(nvs, "token");
+    if (err == ESP_OK)
+    {
+        err = nvs_commit(nvs);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(HTTPS_TAG, "Error committing erase: %s", esp_err_to_name(err));
+        }
+        else
+        {
+            ESP_LOGI(HTTPS_TAG, "Token deleted successfully");
+        }
+    }
+    else if (err == ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGW(HTTPS_TAG, "Token key not found for deletion");
+        err = ESP_OK; // treat as non-critical if key does not exist
+    }
+    else
+    {
+        ESP_LOGE(HTTPS_TAG, "Error erasing token key: %s", esp_err_to_name(err));
+    }
+
+    nvs_close(nvs);
+    return err;
+}

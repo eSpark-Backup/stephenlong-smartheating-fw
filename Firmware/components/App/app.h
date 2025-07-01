@@ -16,6 +16,9 @@ extern device_data_t device_data;
 esp_err_t device_data_init(void);
 esp_err_t device_data_set(uint8_t op);
 esp_err_t reset_device_and_erase_nvs();
+esp_err_t get_device_credentials(char *token);
+esp_err_t save_device_credentials(const char *token);
+esp_err_t delete_device_credentials();
 
 void set_target_temp(float target_temp);
 float get_target_temp(void);

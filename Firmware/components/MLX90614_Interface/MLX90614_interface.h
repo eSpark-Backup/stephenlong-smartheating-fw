@@ -29,6 +29,11 @@ typedef struct {
     int count;   // Number of elements currently in the buffer
 } circular_buffer_t;
 
+typedef struct
+{
+    float amb_temp;
+    float obj_temp;
+} MLX_Temp;
 // void ir_sensor_task(void * pvParameters);
 
 esp_err_t ir_sensor_init(void);
@@ -46,7 +51,8 @@ bool CircularBuffer_Pop(circular_buffer_t* cb, float* data);
 float CircularBuffer_Peek(circular_buffer_t* cb, int index);
 float CircularBuffer_Retrieve(circular_buffer_t* cb, float* data);
 void CircularBuffer_Print(circular_buffer_t* cb);
-
+void setTempValues(float a, float b);
+MLX_Temp getTempValues();
 
 #ifdef __cplusplus
 }

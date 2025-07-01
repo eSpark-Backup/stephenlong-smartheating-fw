@@ -3,40 +3,65 @@
 
 MyLD2410 sensor;
 unsigned long nextPrint = 0, printEvery = 1000;  // print every second
-
+LD2410_Data presenceSens;
 
 void printValue(const uint8_t &val) {
     printf(" ' ' %d" , val);
 }
 
 void printData(){
-    ESP_LOGW(TAG , "Presence Status- %s" , sensor.statusString());
-    
-    if (sensor.presenceDetected()) {
-        ESP_LOGW(TAG , "PRESENCE DETECTED !!  Distance: %ld cm ",sensor.detectedDistance());
-    }
+    ESP_LOGD(TAG , "Presence Status- %s" , sensor.statusString());
     
     if (sensor.movingTargetDetected()) {
-        ESP_LOGW(TAG , "MOVING = Target Signal %d  at %ld cm" , sensor.movingTargetSignal(),  sensor.movingTargetDistance());
+        ESP_LOGD(TAG , "MOVING = Target Signal %d  at %ld cm" , sensor.movingTargetSignal(),  sensor.movingTargetDistance());
         if (sensor.inEnhancedMode()) {
-            // ESP_LOGW(TAG , "signals->[" );
-            printf("[PRESENCE SENSOR] signals->[" );
-            sensor.getMovingSignals().forEach(printValue);
-            printf(" ] thresholds:[" );
-            sensor.getMovingThresholds().forEach(printValue);
-            printf("]\n" );
+
+            if (esp_log_level_get(TAG) >= ESP_LOG_DEBUG)
+            {
+                printf("[PRESENCE SENSOR] signals->[" );
+                sensor.getMovingSignals().forEach(printValue);
+                printf(" ] thresholds:[" );
+                sensor.getMovingThresholds().forEach(printValue);
+                printf("]\n" );
+            }
          }
     }
+}
+
+void setLD2410_Data(SensResponse presenceDetected, unsigned long distance)
+{
+    presenceSens.isPresenceTrue = presenceDetected;
+    presenceSens.presence = distance;
+}
+
+LD2410_Data getLD2410_Data()
+{
+    return presenceSens;
 }
 
 void LD2410Task(void *pvParameters){
     while(1){
 
-          if ((sensor.check() == MyLD2410::Response::DATA) && ((esp_timer_get_time() / 1000) > nextPrint)) {
-            nextPrint = (esp_timer_get_time() / 1000) + printEvery;
-            printData();
-        }
+        if ((esp_timer_get_time() / 1000) > nextPrint)
+        {
+            SensResponse presence = FAIL;
+            unsigned long distance = 0;
+            if (sensor.check() == MyLD2410::Response::DATA) {
+                if (sensor.presenceDetected()) {
+                    presence = (SensResponse)sensor.presenceDetected();
+                    distance = sensor.detectedDistance();
+                }
+                printData();
+            }
+            else if (sensor.check() == MyLD2410::Response::FAIL) {
+                presence = (SensResponse)FAIL;
+                distance =  sensor.detectedDistance();
+            }
+                ESP_LOGD(TAG , "PRESENCE DETECTED %d !!  Distance: %ld cm ", presence, sensor.detectedDistance());
+                setLD2410_Data(presence, distance);
 
+            nextPrint = (esp_timer_get_time() / 1000) + printEvery;
+        }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
@@ -87,6 +112,9 @@ bool sensorSetup()
 
 bool LD2410_init(){
     
+    presenceSens.isPresenceTrue = FAIL;
+    presenceSens.presence = 0;
+
     int ret =sensor.uartInit(LD2410_UART_PORT , LD2410_UART_TX , LD2410_UART_RX, LD2410_BAUD);
     if(ret!= ESP_OK){    
          ESP_LOGE( TAG," uart initialization failed with code: %d  ", ret);
@@ -118,6 +146,8 @@ bool LD2410_init(){
         set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
         return false;
     }
+    else
+        ESP_LOGE(TAG, "Success! Created IR sensor task");
     getDetectionRange();
     getDetectionDuration();
     getGateSensitivities();

@@ -109,6 +109,7 @@ MyLD2410::Response MyLD2410::check() {
             }
         } else {
             // Timeout or error occurred
+            return FAIL;
             break;
         }
         

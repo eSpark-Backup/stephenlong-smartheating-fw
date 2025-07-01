@@ -44,12 +44,15 @@ extern "C" {
 #define PASS_WIFI                   "12345678"
 #define WIFI_SSID_MAX_LEN           32
 #define WIFI_PASS_MAX_LEN           64
+#define CREDENTIAL_VALUE            128
 
 #define DEVICE_TAG                  "APP"    
 #define GPIO_TAG                    "GPIO"
 #define WIFI_TAG                    "_SoftAP"
 #define GATTS_TAG                   "_BLE"
 #define ISR_TAG                     "_ISR"
+#define HTTPS_TAG                   "ThingsBoard"
+
 
 // #define LD2410_UART_TX 17
 // #define LD2410_UART_RX 16
@@ -75,13 +78,14 @@ extern "C" {
 #define CONFIG_SET_RAW_ADV_DATA     0
 #define BLE_PAIR_ENCRYPTION_KEY     16
 
-#define NVS_NAMESPACE_DEVICEDATA   "device_data"
-#define NVS_NAMESPACE_WIFIDATA     "wifi_storage"
-#define NVS_KEY_SSID               "ssid"
-#define NVS_KEY_PASSWORD           "password"
-#define NVS_KEY_MODE               "mode"
-#define NVS_KEY_TARGET_TEMP        "target_temp"
-#define NVS_KEY_DETECTION_DURATION "detection_duration"
+#define NVS_NAMESPACE_DEVICEDATA            "device_data"
+#define NVS_NAMESPACE_WIFIDATA              "wifi_storage"
+#define NVS_KEY_SSID                        "ssid"
+#define NVS_KEY_PASSWORD                    "password"
+#define NVS_KEY_MODE                        "mode"
+#define NVS_KEY_TARGET_TEMP                 "target_temp"
+#define NVS_KEY_DETECTION_DURATION          "detection_duration"
+#define NVS_NAMESPACE_DEVICE_HTTPS_DATA     "https_dev_data"
 
 typedef enum {
     NORMAL_OP = 0x01,
@@ -152,6 +156,7 @@ typedef struct
     char ssid[WIFI_SSID_MAX_LEN];
     char password[WIFI_PASS_MAX_LEN];
     uint8_t duration_val;
+    char tokenKey[CREDENTIAL_VALUE];
 } device_data_t;
 
 typedef struct 

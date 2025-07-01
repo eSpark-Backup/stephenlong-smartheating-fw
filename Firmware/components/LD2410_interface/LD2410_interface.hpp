@@ -30,6 +30,18 @@ typedef struct {
     Thresholds stationary;
 }SensitivityThresholds;
 
+enum SensResponse
+{
+    FAIL = -1,
+    NOT_DETECTED = 0,
+    DETECTED = 1,
+};
+typedef struct
+{
+    SensResponse isPresenceTrue;
+    unsigned long presence;
+} LD2410_Data;
+
 bool LD2410_init();
 bool sensorSetup();
 void setDetectionDuration(uint8_t durationVal);
@@ -38,7 +50,8 @@ void setDetectionRange(bool resolution , uint8_t number_of_gates);
 RangeParams getDetectionRange();
 void setGateSensitivities(uint8_t gateNumber , uint8_t movingThres , uint8_t stationaryThres);
 SensitivityThresholds getGateSensitivities();
-
+void setLD2410_Data(SensResponse presenceDetected, unsigned long distance);
+LD2410_Data getLD2410_Data();
 
 
 
