@@ -70,7 +70,7 @@ void set_led_status(void)
 }
 
 /* Function to set the device status and update the LED status accordingly
- * 
+ *
  * @param bitMask: The bitmask representing the status to be set
  *        op: The operation to be performed (0 for clear, 1 for set)
  */
@@ -108,9 +108,11 @@ int effect_delay(EFFECT_SPEED effecSpeed)
 
 void set_led_effect(led_effect_t effect , COLORS colorSelection , EFFECT_SPEED effectSPEED)
 {
+    ESP_LOGI(TAG, "set_led_effect called: effect=%d, color=%d, speed=%d", effect, colorSelection, effectSPEED);
     current_effect = effect;
     effecSpeed = effectSPEED;
     colorSel = colorSelection;
+    ESP_LOGI(TAG, "LED effect updated successfully");
 }
 
 led_effect_t get_current_led_effect(void)
@@ -133,6 +135,12 @@ RGB_CODE getRGBCode(COLORS colorSel)
             rgbcode.red= 0;
             rgbcode.green= 0;
             rgbcode.blue= 255;
+            return(rgbcode);
+            break;
+        case BLUE_DARK:
+            rgbcode.red= 75;   // Dark blue/indigo for SoftAP
+            rgbcode.green= 0;
+            rgbcode.blue= 130;
             return(rgbcode);
             break;
         case GREEN:
@@ -160,8 +168,8 @@ RGB_CODE getRGBCode(COLORS colorSel)
             rgbcode.blue= 255;
             return(rgbcode);
             break;
-       
-       
+
+
     }
 
 }
@@ -212,7 +220,7 @@ void led_breath_effect()
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state2, sizeof(led_strip_pixels_state2), &tx_config));
         ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
     }
-    vTaskDelay(pdMS_TO_TICKS((effect_delay(effecSpeed))/100)); 
+    vTaskDelay(pdMS_TO_TICKS((effect_delay(effecSpeed))/100));
 
 }
 
@@ -257,7 +265,7 @@ void led_tripple_flash_effect()
 void led_effect_handler()
 {
         switch (current_effect)
-            {                
+            {
             case LED_EFFECT_BLINK:
                 led_blink_effect();
             break;
@@ -322,7 +330,7 @@ void status_led_init(void)
     ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_chan_config, &led_chan));
 
     ESP_LOGD(TAG, "Install led strip encoder");
-    
+
     led_strip_encoder_config_t encoder_config = {
         .resolution = RMT_LED_STRIP_RESOLUTION_HZ,
     };
@@ -333,12 +341,13 @@ void status_led_init(void)
 
     // Build RGB pixels
     set_device_status(1, NORMAL_OP);
-    set_led_effect(LED_EFFECT_STEADY, GREEN , NO_SPEED);
+    // Note: LED control now handled by centralized LED manager
+    // set_led_effect(LED_EFFECT_STEADY, GREEN , NO_SPEED);
 
-    // Create the task for the IR sensor
+    // Create status LED task to execute LED effects (controlled by centralized LED manager)
     if(xTaskCreate(status_led_task, "Status_Led_Task", 2048, NULL, 5, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create status led task");
     }
-    ESP_LOGD(TAG, "status led task created successfully");
+    ESP_LOGD(TAG, "Status LED hardware initialized with centralized LED manager control");
 }
