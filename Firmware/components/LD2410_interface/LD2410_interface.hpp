@@ -3,19 +3,20 @@
 #include "MyLD2410_esp.hpp"
 #include "defines.h"
 #include "app.h"
-#include "freertos/freertos.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "Comm_Interface.h"
 #include "driver/gpio.h"
 
 
+#undef TAG  // Undefine TAG from MyLD2410_esp.hpp if it exists
 #define TAG "PRESENCE_SENSOR"
 
 
 
-typedef struct { 
-    uint8_t resolutionMeters; 
+typedef struct {
+    uint8_t resolutionMeters;
     uint8_t activeGates;
     uint16_t range;
 }RangeParams;
@@ -30,28 +31,23 @@ typedef struct {
     Thresholds stationary;
 }SensitivityThresholds;
 
-enum SensResponse
-{
-    FAIL = -1,
-    NOT_DETECTED = 0,
-    DETECTED = 1,
-};
-typedef struct
-{
-    SensResponse isPresenceTrue;
-    unsigned long presence;
-} LD2410_Data;
-
 bool LD2410_init();
 bool sensorSetup();
+void groundSwitchCheck();
 void setDetectionDuration(uint8_t durationVal);
 uint8_t getDetectionDuration();
 void setDetectionRange(bool resolution , uint8_t number_of_gates);
 RangeParams getDetectionRange();
 void setGateSensitivities(uint8_t gateNumber , uint8_t movingThres , uint8_t stationaryThres);
 SensitivityThresholds getGateSensitivities();
-void setLD2410_Data(SensResponse presenceDetected, unsigned long distance);
-LD2410_Data getLD2410_Data();
+
+// LD2410 sensor data access functions for BLE commands
+bool LD2410_getPresenceDetected();
+uint16_t LD2410_getMovingDistance();
+uint16_t LD2410_getStationaryDistance();
+uint8_t LD2410_getMovingEnergy();
+uint8_t LD2410_getStationaryEnergy();
+
 
 
 

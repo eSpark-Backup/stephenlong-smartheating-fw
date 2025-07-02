@@ -21,7 +21,8 @@ typedef enum {
 typedef enum
 {
     RED = 0,
-    BLUE,
+    BLUE,           // Standard blue (for BLE pairing)
+    BLUE_DARK,      // Dark blue/indigo (for SoftAP pairing)
     GREEN,
     PURPLE,
     YELLOW,

@@ -2,6 +2,7 @@
 #include "Comm_Interface.h"
 #include <nvs_flash.h>
 #include <esp_log.h>
+#include "esp_timer.h"
 
 device_data_t device_data = {0};
 
@@ -90,7 +91,7 @@ esp_err_t device_data_set(uint8_t op)
     if (err != ESP_OK)
     {
         ESP_LOGE(DEVICE_TAG, "Failed to open NVS: %s", esp_err_to_name(err));
-        set_device_status(1, ERROR);      
+        set_device_status(1, ERROR);
         set_led_effect(LED_EFFECT_BLINK, RED ,NO_SPEED );
         return err;
     }
@@ -119,7 +120,7 @@ esp_err_t device_data_set(uint8_t op)
 }
 
 esp_err_t reset_device_and_erase_nvs()
-{   
+{
     set_led_effect(LED_EFFECT_BLINK, PURPLE ,LED_SPEED_FAST );
     esp_err_t err;
 
@@ -152,8 +153,8 @@ void set_detection_duration(uint8_t duration_val)
     // device_data.target_temp = target_temp;
     device_data.duration_val = duration_val;
     ESP_LOGD(DEVICE_TAG, "Presence Detection Duration time set to: %x", device_data.duration_val);
-    
-    
+
+
     device_data_set(2);
 }
 
@@ -186,18 +187,10 @@ esp_err_t get_device_credentials(char *token)
     }
 
     size_t length = CREDENTIAL_VALUE;
-    err = nvs_get_str(nvs, "token", token, &length);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(HTTPS_TAG, "No saved credentials found (nvs_get_str)");
-        nvs_close(nvs);
-        return err;
-    }
-
+    nvs_get_str(nvs, "token", token, &length);
     nvs_close(nvs);
     return ESP_OK;
 }
-
 
 esp_err_t save_device_credentials(const char *token)
 {
@@ -216,39 +209,37 @@ esp_err_t save_device_credentials(const char *token)
     return ESP_OK;
 }
 
-esp_err_t delete_device_credentials()
+// Shared telemetry interval management
+static int current_telemetry_interval = NORMAL_TELEMETRY_TIME;
+static int64_t last_presence_detected_time = 0;
+
+int calculate_telemetry_interval_seconds(bool presence_detected)
 {
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READWRITE, &nvs);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(HTTPS_TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return err;
-    }
+    int64_t current_time = esp_timer_get_time() / 1000; // Convert to milliseconds
 
-    err = nvs_erase_key(nvs, "token");
-    if (err == ESP_OK)
-    {
-        err = nvs_commit(nvs);
-        if (err != ESP_OK)
-        {
-            ESP_LOGE(HTTPS_TAG, "Error committing erase: %s", esp_err_to_name(err));
-        }
-        else
-        {
-            ESP_LOGI(HTTPS_TAG, "Token deleted successfully");
+    if (presence_detected) {
+        current_telemetry_interval = PRESENCE_TELEMETRY_TIME; // 10 seconds
+        last_presence_detected_time = current_time;
+    } else {
+        // Check how long since last presence detection
+        if (current_time - last_presence_detected_time >= NO_ACTIVITY_TIME_MS) {
+            // Gradually increase interval when idle
+            current_telemetry_interval += IDLE_TELEMETRY_TIME; // +60s
+            if (current_telemetry_interval > MAX_IDLE_INTERVAL) {
+                current_telemetry_interval = MAX_IDLE_INTERVAL;
+            }
+        } else {
+            // Return to normal interval when no presence but < 10min since last detection
+            current_telemetry_interval = NORMAL_TELEMETRY_TIME; // 30 seconds
         }
     }
-    else if (err == ESP_ERR_NVS_NOT_FOUND)
-    {
-        ESP_LOGW(HTTPS_TAG, "Token key not found for deletion");
-        err = ESP_OK; // treat as non-critical if key does not exist
-    }
-    else
-    {
-        ESP_LOGE(HTTPS_TAG, "Error erasing token key: %s", esp_err_to_name(err));
-    }
 
-    nvs_close(nvs);
-    return err;
+    return current_telemetry_interval;
+}
+
+void update_presence_detection_time(bool presence_detected)
+{
+    if (presence_detected) {
+        last_presence_detected_time = esp_timer_get_time() / 1000; // Convert to milliseconds
+    }
 }

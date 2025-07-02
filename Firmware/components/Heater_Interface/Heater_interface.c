@@ -1,7 +1,7 @@
 #include "app.h"
 #include "Heater_interface.h"
 #include "MLX90614_interface.h"
-#include "freertos/freertos.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 
@@ -62,6 +62,18 @@ void set_heater_mode(DEVICE_MODE mode)
             ESP_LOGD(TAG, "Heater interface task created successfully");
             ESP_LOGD(TAG, "Heater mode switched to AUTO_MODE");
             break;
+        case BYPASS_MODE:
+            // Stop automatic control task
+            if(xHeaterTaskHandle != NULL)
+            {
+                vTaskDelete(xHeaterTaskHandle);
+                xHeaterTaskHandle = NULL;
+                ESP_LOGD(TAG, "Heater automatic task stopped for BYPASS_MODE");
+            }
+            // Turn on both heating elements for full power
+            set_heater_state(HEATER_HIGH);
+            ESP_LOGD(TAG, "Heater mode switched to BYPASS_MODE - full power enabled");
+            break;
         default:
             ESP_LOGE(TAG, "Mode not supported");
             break;
@@ -115,7 +127,7 @@ HEATER_STATE get_heater_state(void)
     int heater_high = gpio_get_level(HEATER_HIGH_IO);
 
     uint8_t heater_bits = (heater_high << 1) | heater_low;
-    ESP_LOGD(TAG, "Heater state bits: %d", heater_bits);
+    // ESP_LOGD(TAG, "Heater state bits: %d", heater_bits); // Removed to reduce spam
 
     switch (heater_bits)
     {
@@ -144,8 +156,19 @@ HEATER_STATE control_heater(float setpoint, float current_temp)
 
 void operate_heater(void)
 {
+    float target = get_target_temp();
+    if (target <= 0) {
+        // Auto mode with no valid target - turn off heater but stay in auto mode
+        if(get_heater_state() != HEATER_OFF) {
+            set_heater_state(HEATER_OFF);
+            ESP_LOGD(TAG, "Heater OFF - no valid target temperature");
+        }
+        return;
+    }
+
+    // Normal auto mode operation
     float Toperative = get_operative_temp();
-    HEATER_STATE state = control_heater(get_target_temp(), Toperative);
+    HEATER_STATE state = control_heater(target, Toperative);
     if(state != get_heater_state())
     {
         set_heater_state(state);
