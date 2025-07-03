@@ -21,7 +21,7 @@ The pairing button (located on the device) provides comprehensive control throug
 | Duration          | Action                     | LED Feedback              | Description                                                                                           |
 | ----------------- | -------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------- |
 | **0-5 seconds**   | No Action                  | No LED feedback           | Safety window - prevents accidental triggers                                                          |
-| **60 seconds**  | BLE Pairing Mode           | Blue breathing            | Primary provisioning method - enter BLE pairing mode for WiFi setup (WiFi disabled for clean pairing) |
+| **5-10 seconds**  | BLE Pairing Mode           | Blue breathing            | Primary provisioning method - enter BLE pairing mode for WiFi setup (WiFi disabled for clean pairing) |
 | **10-30 seconds** | Factory Reset Confirmation | Purple breathing          | Destructive action requiring confirmation - enter factory reset confirmation mode                     |
 | **30+ seconds**   | Bypass Mode (Technician)   | Yellow breathing → steady | Direct heating control mode - technician only, disables automatic control                             |
 
@@ -211,8 +211,7 @@ The WS2812 status LED follows a priority system where higher priority states ove
 
 ```c
 // Button press durations
-BLE_PAIRING_DURATION     = 60 seconds
-SOFTAP_DURATION     = 5 minutes
+BLE_PAIRING_DURATION     = 5-10 seconds
 FACTORY_RESET_DURATION   = 10-30 seconds
 BYPASS_MODE_DURATION     = 30+ seconds
 
@@ -222,6 +221,12 @@ BUTTON_DEBOUNCE         = 50ms
 
 // Factory reset confirmation
 CONFIRMATION_TIMEOUT     = 5 seconds
+
+//BLE Pair mode Timeout 
+BLE_PAIRING_TIMEOUT = 60 seconds
+
+//SoftAP mode Timeout 
+SOFT_AP_TIMEOUT = 5 minutes
 ```
 
 ## Integration with Mobile Apps
