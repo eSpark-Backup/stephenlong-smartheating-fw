@@ -1,0 +1,53 @@
+# Problem
+Currently our WiFi provisioning requires users to manually type network names, which is error-prone and poor UX. Industry standard is to show available networks with signal strength so users can select from a list.
+
+# Current Provisioning Methods
+- BLE JSON: Manual SSID entry {"ssid":"NetworkName","pass":"Password"}
+- SoftAP Portal: Manual SSID entry via web form at 192.168.4.1
+
+# Proposed Enhancement
+- Add WiFi network scanning to both provisioning methods following Improv WiFi patterns:
+
+## BLE API Extension
+- Add new command or extend WiFi provisioning service:
+
+	* Scan request: {"action":"scan"} or new command 0x12
+	* Scan response: List of networks with RSSI, security type, channel
+	* Format: JSON list with network details for mobile app autocomplete
+- Captive Portal Enhancement
+	* Add "Scan Networks" button to web interface
+	* Display available networks in dropdown/list
+	* Show signal strength indicators
+	* Auto-populate SSID field when network selected
+
+## Implementation Details
+- WiFi Scanning:
+
+	* Use ESP-IDF esp_wifi_scan_start() APIs
+	* Sort networks by signal strength (RSSI)
+	* Handle scan duration (1-3 seconds) with progress indication
+	* Filter duplicate SSIDs, show strongest signal
+
+Response Format (BLE):
+
+{
+  "action":"scan_result", 
+  "networks":[
+    {"ssid":"MyNetwork","rssi":-45,"auth":"WPA2","channel":6},
+    {"ssid":"Neighbor","rssi":-67,"auth":"WPA3","channel":11}
+  ]
+}
+
+- Response Format (HTTP):
+
+	* JSON endpoint for AJAX requests from captive portal
+	* Same network data structure as BLE
+
+- Files to modify:
+
+	* BLE provisioning service (JSON extension)
+	* SoftAP web interface HTML/JS
+	* WiFi management functions
+	* BLE_INTERFACE.md documentation
+
+This follows industry patterns seen in Improv WiFi implementations and other IoT devices for better user experience during setup.
