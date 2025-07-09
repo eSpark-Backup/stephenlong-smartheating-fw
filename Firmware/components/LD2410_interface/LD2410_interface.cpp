@@ -105,9 +105,26 @@ void LD2410Task(void *pvParameters){
                 }
             }
 
-            // Handle BLE notifications every 5 seconds
+            // Handle BLE notifications with adaptive timing
             bool presence_detected = sensor.presenceDetected();
-            unsigned long ble_interval_ms = BLE_STREAMING_INTERVAL * 1000; // Fixed 5-second interval for BLE
+            
+            // Determine BLE streaming interval based on presence and activity (matches telemetry pattern)
+            static unsigned long last_activity_time = 0;
+            static int ble_interval = BLE_STREAMING_NORMAL_TIME;
+            
+            // Check if any client connected within the first minute - if so, use fast interval
+            if (has_recently_connected_ble_clients()) {
+                ble_interval = BLE_FIRST_MINUTE_TIME;
+            } else if (presence_detected) {
+                last_activity_time = currentTime;
+                ble_interval = BLE_STREAMING_PRESENCE_TIME;
+            } else if (currentTime - last_activity_time < NO_ACTIVITY_TIME_MS) {
+                ble_interval = BLE_STREAMING_NORMAL_TIME;
+            } else {
+                ble_interval = BLE_STREAMING_IDLE_TIME;
+            }
+            
+            unsigned long ble_interval_ms = ble_interval * 1000;
 
             if (currentTime >= nextBLENotification) {
                 // Only send BLE notifications if there are active BLE clients connected
@@ -122,8 +139,9 @@ void LD2410Task(void *pvParameters){
                     // Send streaming notification with current timestamp
                     send_ble_presence_notification(has_target, move_dist, still_dist, move_energy, still_energy);
 
-                    ESP_LOGD(TAG, "BLE presence notification sent (interval: %ds, presence: %s)",
-                            BLE_STREAMING_INTERVAL, presence_detected ? "yes" : "no");
+                    ESP_LOGD(TAG, "BLE presence notification sent (interval: %ds, presence: %s, recent_connection: %s)",
+                            ble_interval, presence_detected ? "yes" : "no", 
+                            has_recently_connected_ble_clients() ? "yes" : "no");
                 } else {
                     ESP_LOGD(TAG, "BLE presence notification skipped - no active clients");
                 }

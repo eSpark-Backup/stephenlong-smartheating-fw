@@ -35,6 +35,13 @@ void start_softap_provisioning(void)
 void stop_softap_provisioning(void)
 {
     stop_webserver();
+    
+    // Validate saved credentials before attempting connection
+    if (strlen(device_data.ssid) == 0 || strlen(device_data.password) == 0) {
+        ESP_LOGE(DEVICE_TAG, "Invalid saved WiFi credentials - SSID or password is empty");
+        return;
+    }
+    
     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
     wifi_init_sta(device_data.ssid, device_data.password);
     set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
@@ -171,6 +178,10 @@ void event_handler(void *arg, esp_event_base_t event_base,
         set_led_status_flag("pairing_mode_active", false);
         set_led_status_flag("normal_operation", true);
 
+        // For development: Keep BLE advertising active even after WiFi connects
+        ESP_LOGI(TAG WIFI_TAG, "Restarting BLE advertising for development access");
+        startBLEAdvert();
+
         // Send JSON connected status
         send_wifi_status_json("connected", NULL, NULL);
     }
@@ -256,8 +267,8 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
     {
         if ( temp_char_handle == herschel_handle_table[IDX_CONTROL_POINT_VAL])
         {
-            ESP_LOGD(GATTS_TAG, "calling 'uart'");
-            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "uart");
+            ESP_LOGD(GATTS_TAG, "calling 'ble'");
+            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "ble");
         }
         else if ( temp_char_handle == wifi_handle_table[IDX_WIFI_RX_VAL])
         {
@@ -361,10 +372,26 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
     // Send connecting status
     send_wifi_status_json("connecting", ssid_item->valuestring, NULL);
 
+    // Double-check credentials before calling wifi_init_sta
+    if (ssid_item->valuestring == NULL || password_item->valuestring == NULL) {
+        ESP_LOGE(GATTS_TAG, "SSID or password valuestring is NULL after validation");
+        send_wifi_status_json("failed", NULL, "Internal error");
+        cJSON_Delete(json);
+        return;
+    }
+
+    // Copy strings to local variables before freeing JSON memory
+    char ssid_copy[WIFI_SSID_MAX_LEN];
+    char password_copy[WIFI_PASS_MAX_LEN];
+    strncpy(ssid_copy, ssid_item->valuestring, sizeof(ssid_copy) - 1);
+    strncpy(password_copy, password_item->valuestring, sizeof(password_copy) - 1);
+    ssid_copy[sizeof(ssid_copy) - 1] = '\0';  // Ensure null termination
+    password_copy[sizeof(password_copy) - 1] = '\0';  // Ensure null termination
+
     cJSON_Delete(json); // Free memory
 
-    // Initialize WiFi with new credentials
-    wifi_init_sta(ssid_item->valuestring, password_item->valuestring);
+    // Initialize WiFi with copied credentials
+    wifi_init_sta(ssid_copy, password_copy);
 }
 
 void send_wifi_status_json(const char *status, const char *ssid, const char *error)

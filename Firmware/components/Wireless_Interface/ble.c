@@ -1,32 +1,16 @@
 #include "ble.h"
 #include "ble_service_tables.h"
+#include "Comm_Interface.h"
 #include <string.h>
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "defines.h"
 
-// Local definitions to avoid circular includes
-#define PROFILE_NUM                 2
-#define PROFILE_PROV_APP_ID         0
-#define PROFILE_UART_APP_ID         1
-#define GATTS_TAG                   "GATTS"
+// Local definitions
 #define COMPANY_ID                  0x0EC3  // Herschel Infrared Ltd.
-
-// Type definitions
-typedef struct {
-    uint8_t *prepare_buf;
-    int prepare_len;
-} prepare_type_env_t;
-
-struct gatts_profile_inst {
-    esp_gatts_cb_t gatts_cb;
-    uint16_t gatts_if;
-    uint16_t app_id;
-    uint16_t conn_id;
-};
 
 // Forward declarations
 void parse_wifi_json_credentials(uint8_t *data, int len);
-void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
-uint8_t parse_command(uint8_t *data, int len, const char *property);
 
 // Client state storage (exported for use by Comm_Interface.c)
 stream_client_state_t client_states[MAX_BLE_CLIENTS];
@@ -125,6 +109,7 @@ void initialize_client_state(uint16_t conn_id, esp_gatt_if_t gatts_if) {
             client_states[i].conn_id = conn_id;
             client_states[i].gatts_if = gatts_if;
             client_states[i].is_active = true;
+            client_states[i].connection_time_us = esp_timer_get_time();
             active_client_count++;
             ESP_LOGI(GATTS_TAG, "Initialized client state slot %d for conn_id=%d (total clients: %d)",
                      i, conn_id, active_client_count);
@@ -141,6 +126,17 @@ void cleanup_client_state(uint16_t conn_id) {
             active_client_count--;
             ESP_LOGI(GATTS_TAG, "Cleaned up client state slot %d for conn_id=%d (total clients: %d)",
                      i, conn_id, active_client_count);
+            
+            // Restart advertising if no clients are connected
+            if (active_client_count == 0) {
+                ESP_LOGI(GATTS_TAG, "No active clients, restarting BLE advertising");
+                esp_err_t ret = esp_ble_gap_start_advertising(&adv_params);
+                if (ret != ESP_OK) {
+                    ESP_LOGE(GATTS_TAG, "Failed to restart advertising: %s", esp_err_to_name(ret));
+                } else {
+                    ESP_LOGI(GATTS_TAG, "BLE advertising restarted successfully");
+                }
+            }
             return;
         }
     }
@@ -149,6 +145,23 @@ void cleanup_client_state(uint16_t conn_id) {
 
 bool has_active_ble_clients(void) {
     return active_client_count > 0;
+}
+
+bool has_recently_connected_ble_clients(void) {
+    if (active_client_count == 0) {
+        return false;
+    }
+    
+    int64_t current_time = esp_timer_get_time();
+    for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
+        if (client_states[i].is_active) {
+            int64_t connection_duration = current_time - client_states[i].connection_time_us;
+            if (connection_duration < BLE_FIRST_MINUTE_DURATION * 1000) {  // Convert ms to us
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void update_cccd_state(uint16_t conn_id, uint16_t handle, uint16_t value) {
@@ -269,8 +282,45 @@ static void gatts_herschel_event_handler(esp_gatts_cb_event_t event, esp_gatt_if
 
     case ESP_GATTS_WRITE_EVT:
         if (!param->write.is_prep) {
-            if (param->write.len == 2) {
+            // Log all write attempts for debugging
+            ESP_LOGD(GATTS_TAG, "BLE write: handle=%d, len=%d, data=[", param->write.handle, param->write.len);
+            for (int i = 0; i < param->write.len && i < 16; i++) {
+                ESP_LOGD(GATTS_TAG, "0x%02x%s", param->write.value[i], (i < param->write.len-1) ? " " : "");
+            }
+            ESP_LOGD(GATTS_TAG, "]");
+            
+            // Check if this is a command write to Control Point
+            if (param->write.handle == herschel_handle_table[IDX_CONTROL_POINT_VAL]) {
+                ESP_LOGI(GATTS_TAG, "BLE command received, processing...");
+                ESP_LOGD(GATTS_TAG, "Command data: len=%d, bytes=[", param->write.len);
+                for (int i = 0; i < param->write.len && i < 8; i++) {
+                    ESP_LOGD(GATTS_TAG, "  [%d]=0x%02x", i, param->write.value[i]);
+                }
+                ESP_LOGD(GATTS_TAG, "]");
+                parse_command(param->write.value, param->write.len, "ble");
+            }
+            // Check if this might be a command to an unknown handle
+            else if (param->write.len > 2 || (param->write.len == 2 && param->write.value[0] >= 0x01 && param->write.value[0] <= 0x11)) {
+                ESP_LOGW(GATTS_TAG, "Possible command sent to wrong handle=%d (should be %d for Control Point)", 
+                         param->write.handle, herschel_handle_table[IDX_CONTROL_POINT_VAL]);
+                ESP_LOGW(GATTS_TAG, "Command data: [0]=0x%02x (matches command range 0x01-0x11)", param->write.value[0]);
+                
+                // Try processing as command anyway for debugging
+                ESP_LOGW(GATTS_TAG, "Attempting to process as command...");
+                parse_command(param->write.value, param->write.len, "ble_wrong_handle");
+            }
+            // Handle CCCD writes (length == 2 and doesn't look like command)
+            else if (param->write.len == 2) {
                 uint16_t cccd_value = param->write.value[1] << 8 | param->write.value[0];
+                ESP_LOGD(GATTS_TAG, "CCCD write: handle=%d, value=0x%04x, len=%d", param->write.handle, cccd_value, param->write.len);
+                ESP_LOGD(GATTS_TAG, "Raw CCCD bytes: [0]=0x%02x, [1]=0x%02x (parsing as little-endian)", 
+                         param->write.value[0], param->write.value[1]);
+                
+                // Validate CCCD value
+                if (cccd_value > 0x0003) {
+                    ESP_LOGW(GATTS_TAG, "Invalid CCCD value 0x%04x! Valid values: 0x0000 (disabled), 0x0001 (notify), 0x0002 (indicate), 0x0003 (both)", cccd_value);
+                    ESP_LOGW(GATTS_TAG, "Raw bytes: [0]=0x%02x, [1]=0x%02x", param->write.value[0], param->write.value[1]);
+                }
 
                 if (param->write.handle == herschel_handle_table[IDX_CONTROL_POINT_CFG] ||
                     param->write.handle == herschel_handle_table[IDX_RESPONSE_CFG] ||
@@ -278,14 +328,41 @@ static void gatts_herschel_event_handler(esp_gatts_cb_event_t event, esp_gatt_if
                     param->write.handle == herschel_handle_table[IDX_PRESENCE_DATA_CFG]) {
                     update_cccd_state(param->write.conn_id, param->write.handle, cccd_value);
                 } else {
-                    ESP_LOGW(GATTS_TAG, "CCCD write to unknown handle=%d", param->write.handle);
+                    ESP_LOGW(GATTS_TAG, "CCCD write to unknown handle=%d, CCCD value=0x%04x", param->write.handle, cccd_value);
+                    ESP_LOGD(GATTS_TAG, "Known handles: Control Point CCCD=%d, Response CCCD=%d, Temp CCCD=%d, Presence CCCD=%d",
+                             herschel_handle_table[IDX_CONTROL_POINT_CFG], herschel_handle_table[IDX_RESPONSE_CFG], 
+                             herschel_handle_table[IDX_TEMP_DATA_CFG], herschel_handle_table[IDX_PRESENCE_DATA_CFG]);
+                    
+                    // Debug: Check if handle matches any characteristic values
+                    ESP_LOGD(GATTS_TAG, "All Herschel handles: SVC=%d, CP_CHAR=%d, CP_VAL=%d, CP_CFG=%d, RESP_CHAR=%d, RESP_VAL=%d, RESP_CFG=%d",
+                             herschel_handle_table[IDX_HERSCHEL_SVC], herschel_handle_table[IDX_CONTROL_POINT_CHAR],
+                             herschel_handle_table[IDX_CONTROL_POINT_VAL], herschel_handle_table[IDX_CONTROL_POINT_CFG],
+                             herschel_handle_table[IDX_RESPONSE_CHAR], herschel_handle_table[IDX_RESPONSE_VAL],
+                             herschel_handle_table[IDX_RESPONSE_CFG]);
+                    
+                    // Check if this is the Response characteristic value handle (common client mistake)
+                    if (param->write.handle == herschel_handle_table[IDX_RESPONSE_VAL]) {
+                        ESP_LOGW(GATTS_TAG, "Client attempting CCCD write to Response VALUE handle instead of CCCD handle!");
+                        ESP_LOGW(GATTS_TAG, "Client should write to handle %d (Response CCCD), not %d (Response VALUE)",
+                                 herschel_handle_table[IDX_RESPONSE_CFG], herschel_handle_table[IDX_RESPONSE_VAL]);
+                    }
                 }
-            } else if (param->write.handle == herschel_handle_table[IDX_CONTROL_POINT_VAL]) {
+            } else {
                 ESP_LOGI(GATTS_TAG, "BLE command received, processing...");
+                ESP_LOGD(GATTS_TAG, "Command data: len=%d, bytes=[", param->write.len);
+                for (int i = 0; i < param->write.len && i < 8; i++) {
+                    ESP_LOGD(GATTS_TAG, "  [%d]=0x%02x", i, param->write.value[i]);
+                }
+                ESP_LOGD(GATTS_TAG, "]");
                 parse_command(param->write.value, param->write.len, "ble");
             }
         }
         write_event_env(gatts_if, &a_prepare_write_env, param);
+        break;
+
+    case ESP_GATTS_EXEC_WRITE_EVT:
+        ESP_LOGI(GATTS_TAG, "ESP_GATTS_EXEC_WRITE_EVT");
+        exec_write_event_env(&a_prepare_write_env, param);
         break;
 
     case ESP_GATTS_CONNECT_EVT:

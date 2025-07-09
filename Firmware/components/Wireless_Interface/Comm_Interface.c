@@ -56,8 +56,10 @@ void ble_command_task(void * pvParameters)
 
         if(uart_cmd_handler_flag)
         {
-            printf("EXECUTING COMMAND\n");
+            ESP_LOGI(TAG, "EXECUTING COMMAND: 0x%02X", blecmd);
             execute_command();
+            uart_cmd_handler_flag = false; // Reset flag after execution
+            ESP_LOGI(TAG, "COMMAND EXECUTION COMPLETE: 0x%02X", blecmd);
         }
     }
     vTaskDelete( NULL );
@@ -289,7 +291,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     blecmd = (BLE_COMMANDS)(uint8_t)packet[0];
 
     // Determine whether to allow command based on property
-    bool allow_all = (strcmp(property, "uart") == 0);
+    bool allow_all = (strcmp(property, "uart") == 0) || (strcmp(property, "ble") == 0);
     // bool cmd_wifi = (strcmp(property, "wifi") == 0);
     // bool cmd_uart = (strcmp(property, "uart") == 0);
 
@@ -342,10 +344,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 5) {  // Need command + 4 bytes for float
+                ESP_LOGE(TAG, "SET_TARGET_TEMP: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* temp_bytes = (char*)(malloc(4));
             if (!temp_bytes) {
-                ESP_LOGE(TAG, "Memory allocation failed for temperature parameters.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for temperature parameters!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(temp_bytes, &packet[1], 4);
             bleParameters[0] = temp_bytes;
@@ -356,10 +364,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "SET_RELAY_STATE: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* relay_state = (char*)(malloc(1));
             if (!relay_state) {
-                ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for relay state parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(relay_state, &packet[1], 1);
             bleParameters[0] = relay_state;
@@ -370,13 +384,20 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "SET_OPERATING_MODE: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* mode = (char*)(malloc(1));
             if (!mode) {
-                ESP_LOGE(TAG, "Memory allocation failed for operating mode parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for operating mode parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(mode, &packet[1], 1);
             bleParameters[0] = mode;
+            ESP_LOGI(TAG, "SET_OPERATING_MODE command parsed successfully, mode=%d", *mode);
             break;
 
         case CONTROL_SENSOR_BOARD:
@@ -384,10 +405,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "CONTROL_SENSOR_BOARD: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* sensor_control = (char*)(malloc(1));
             if (!sensor_control) {
-                ESP_LOGE(TAG, "Memory allocation failed for sensor board control parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for sensor board control parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(sensor_control, &packet[1], 1);
             bleParameters[0] = sensor_control;
@@ -399,10 +426,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "CONTROL_FRONT_LED: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* led_control = (char*)(malloc(1));
             if (!led_control) {
-                ESP_LOGE(TAG, "Memory allocation failed for LED control parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for LED control parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(led_control, &packet[1], 1);
             bleParameters[0] = led_control;
@@ -434,7 +467,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
 void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
 {
     uint8_t resp[1 + ((len == 0) ? 1: len)];
-    ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: status %d", status);
+    ESP_LOGI(TAG GATTS_TAG, "Sending BLE response for command 0x%02X, status=%d, len=%d", blecmd, status, len);
     ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: len %d", len);
 
     resp[0] = blecmd;
@@ -454,6 +487,9 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
     // Send to all active clients using the multi-client approach from ble.c
     int notifications_sent = 0;
 
+    ESP_LOGD(TAG GATTS_TAG, "Sending BLE response: status=%d, len=%d, using handle=%d", 
+             status, len, herschel_handle_table[IDX_RESPONSE_VAL]);
+
     for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
         if (client_states[i].is_active) {
             esp_err_t err = esp_ble_gatts_send_indicate(
@@ -461,13 +497,19 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
                 client_states[i].conn_id,
                 herschel_handle_table[IDX_RESPONSE_VAL],
                 sizeof(resp), resp, false);
-            if (err == ESP_OK) notifications_sent++;
-            else ESP_LOGE(TAG GATTS_TAG, "Failed to send BLE notification to client %d, error: %s", i, esp_err_to_name(err));
+            if (err == ESP_OK) {
+                notifications_sent++;
+                ESP_LOGD(TAG GATTS_TAG, "BLE response sent to client %d successfully", i);
+            } else {
+                ESP_LOGE(TAG GATTS_TAG, "Failed to send BLE notification to client %d, error: %s", i, esp_err_to_name(err));
+            }
         }
     }
 
     if (notifications_sent == 0) {
         ESP_LOGW(TAG GATTS_TAG, "No active BLE clients to send notification to");
+    } else {
+        ESP_LOGI(TAG GATTS_TAG, "BLE response sent to %d clients", notifications_sent);
     }
 }
 
@@ -481,8 +523,17 @@ void wifi_init_sta(const char *ssid, const char *password)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &instance_got_ip));
 
     wifi_config_t wifi_config = {0};
-    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
-    strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+    
+    // Check for null pointers to prevent crashes
+    if (ssid == NULL || password == NULL) {
+        ESP_LOGE(TAG WIFI_TAG, "wifi_init_sta: ssid or password is NULL");
+        return;
+    }
+    
+    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
+    strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+    wifi_config.sta.ssid[sizeof(wifi_config.sta.ssid) - 1] = '\0';  // Ensure null termination
+    wifi_config.sta.password[sizeof(wifi_config.sta.password) - 1] = '\0';  // Ensure null termination
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));

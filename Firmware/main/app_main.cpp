@@ -610,22 +610,86 @@ void execute_command(void)
 
         temp_data.ambient = get_ambient_temp();
         temp_data.object = get_object_temp();
-        temp_data.operative = 0.5f * temp_data.ambient + 0.5f * temp_data.object;
+        temp_data.operative = get_operative_temp(); // Use adaptive calculation consistent with heating control
 
         send_ble_uart_notification(ESP_OK, (uint8_t*)&temp_data, sizeof(temp_data));
         break;
     }
     case SET_TARGET_TEMP:{
         float targetTemp = *(float*)bleParameters[0];
-        ESP_LOGI(DEVICE_TAG, "Setting target temperature to %.1f", targetTemp);
-        set_heater_temp(targetTemp);
-        send_ble_uart_notification(ESP_OK, NULL, 0);
+        
+        // Calculate relative trigger values
+        float autoModeTrigger = UI_MIN_TEMP_CELSIUS - 2.0f;    // min-2
+        float manualOffTrigger = UI_MIN_TEMP_CELSIUS - 1.0f;   // min-1  
+        float manualHighTrigger = UI_MAX_TEMP_CELSIUS + 1.0f;  // max+1
+        
+        // Check for special trigger values
+        if (targetTemp == autoModeTrigger) {
+            // Special value min-2: Set auto mode (restore trigger)
+            ESP_LOGI(DEVICE_TAG, "Restore trigger received (%.1f)", targetTemp);
+            set_device_mode(AUTO_MODE);
+            send_ble_uart_notification(ESP_OK, NULL, 0);
+        }
+        else if (targetTemp == manualOffTrigger) {
+            // Special value min-1: Set manual mode + heater off (off trigger)
+            ESP_LOGI(DEVICE_TAG, "Off trigger received (%.1f)", targetTemp);
+            set_device_mode(MANUAL_MODE);
+            set_heater_state(HEATER_OFF);
+            send_ble_uart_notification(ESP_OK, NULL, 0);
+        }
+        else if (targetTemp == manualHighTrigger) {
+            // Special value max+1: Set manual mode + heater high (boost trigger)
+            ESP_LOGI(DEVICE_TAG, "Boost trigger received (%.1f)", targetTemp);
+            set_device_mode(MANUAL_MODE);
+            set_heater_state(HEATER_HIGH);
+            send_ble_uart_notification(ESP_OK, NULL, 0);
+        }
+        else if (targetTemp >= UI_MIN_TEMP_CELSIUS && targetTemp <= UI_MAX_TEMP_CELSIUS) {
+            // Normal temperature range: Store temperature normally
+            ESP_LOGI(DEVICE_TAG, "Setting target temperature to %.1f", targetTemp);
+            set_heater_temp(targetTemp);
+            send_ble_uart_notification(ESP_OK, NULL, 0);
+        }
+        else {
+            // Invalid temperature range: Send error response
+            ESP_LOGE(DEVICE_TAG, "Invalid temperature %.1f (valid range: %.0f-%.0f°C, triggers: %.0f/%.0f/%.0f)", 
+                     targetTemp, UI_MIN_TEMP_CELSIUS, UI_MAX_TEMP_CELSIUS, 
+                     autoModeTrigger, manualOffTrigger, manualHighTrigger);
+            send_ble_uart_notification(ESP_FAIL, NULL, 0);
+        }
         break;
     }
     case GET_TARGET_TEMP:{
         ESP_LOGI(DEVICE_TAG, "Getting target temperature...");
-        float targetTemp = get_target_temp();
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&targetTemp, sizeof(targetTemp));
+        float responseTemp;
+        
+        DEVICE_MODE currentMode = get_device_mode();
+        if (currentMode == MANUAL_MODE) {
+            // In manual mode, return appropriate trigger value based on heater state
+            HEATER_STATE heaterState = get_heater_state();
+            if (heaterState == HEATER_OFF) {
+                // Manual off state - return off trigger
+                responseTemp = UI_MIN_TEMP_CELSIUS - 1.0f;
+                ESP_LOGI(DEVICE_TAG, "Manual mode OFF - returning off trigger (%.1f)", responseTemp);
+            }
+            else if (heaterState == HEATER_HIGH) {
+                // Manual high state - return boost trigger  
+                responseTemp = UI_MAX_TEMP_CELSIUS + 1.0f;
+                ESP_LOGI(DEVICE_TAG, "Manual mode HIGH - returning boost trigger (%.1f)", responseTemp);
+            }
+            else {
+                // Manual mode but not off/high state - return stored temp
+                responseTemp = get_target_temp();
+                ESP_LOGI(DEVICE_TAG, "Manual mode other state - returning stored temp (%.1f)", responseTemp);
+            }
+        }
+        else {
+            // Auto mode or other modes - return actual stored target temperature
+            responseTemp = get_target_temp();
+            ESP_LOGI(DEVICE_TAG, "Auto mode - returning stored temp (%.1f)", responseTemp);
+        }
+        
+        send_ble_uart_notification(ESP_OK, (uint8_t*)&responseTemp, sizeof(responseTemp));
         break;
     }
     case SET_OPERATING_MODE:{
@@ -1143,16 +1207,22 @@ void button_init(void)
 
 extern "C" void app_main(void)
 {
+    // Configure log levels to reduce verbose output
+    esp_log_level_set("wifi", ESP_LOG_INFO);     // Hide debug WiFi logs like "mms: 0->0"
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_WARN); // Reduce HTTP client verbosity
+    esp_log_level_set("esp-tls", ESP_LOG_WARN);     // Reduce TLS verbosity
+    esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
+    
     status_led_init();
     led_manager_init();  // Initialize centralized LED management
     device_data_init();
     button_init();  // This now turns on sensor board power (GPIO10)
     
-    // // Initialize sensors after power is applied to sensor board
-    // ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
-    // LD2410_init();
-    // ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
-    // ir_sensor_init();
+    // Initialize sensors after power is applied to sensor board
+    ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
+    LD2410_init();
+    ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
+    ir_sensor_init();
     heater_interface_init();
     
     // Initialize energy tracking system
@@ -1208,15 +1278,33 @@ extern "C" void app_main(void)
 // WiFi monitoring task - sends periodic WiFi status notifications
 static void wifi_monitoring_task(void *pvParameters)
 {
-    ESP_LOGI(DEVICE_TAG, "WiFi monitoring task started - will send status every %d seconds", BLE_STREAMING_INTERVAL);
+    ESP_LOGI(DEVICE_TAG, "WiFi monitoring task started - will send status with adaptive intervals");
 
     static int64_t last_wifi_notification_time = 0;
+    static int64_t last_activity_time = 0;
 
     while(1) {
         vTaskDelay(pdMS_TO_TICKS(1000)); // Check every second
 
         int64_t current_time = esp_timer_get_time() / 1000; // Convert to milliseconds
-        int64_t wifi_interval_ms = BLE_STREAMING_INTERVAL * 1000; // Fixed 5-second interval
+        
+        // Determine WiFi status streaming interval based on presence and activity (matches BLE pattern)
+        bool presence_detected = get_presence_detected();
+        static int wifi_interval = BLE_STREAMING_NORMAL_TIME;
+        
+        // Check if any client connected within the first minute - if so, use fast interval
+        if (has_recently_connected_ble_clients()) {
+            wifi_interval = BLE_FIRST_MINUTE_TIME;
+        } else if (presence_detected) {
+            last_activity_time = current_time;
+            wifi_interval = BLE_STREAMING_PRESENCE_TIME;
+        } else if (current_time - last_activity_time < NO_ACTIVITY_TIME_MS) {
+            wifi_interval = BLE_STREAMING_NORMAL_TIME;
+        } else {
+            wifi_interval = BLE_STREAMING_IDLE_TIME;
+        }
+        
+        int64_t wifi_interval_ms = wifi_interval * 1000;
 
         if (current_time - last_wifi_notification_time >= wifi_interval_ms) {
             // Get current WiFi status
@@ -1249,7 +1337,9 @@ static void wifi_monitoring_task(void *pvParameters)
                 send_wifi_status_notification(json_status);
                 last_wifi_notification_time = current_time;
 
-                ESP_LOGD(DEVICE_TAG, "WiFi status notification sent: %s", json_status);
+                ESP_LOGD(DEVICE_TAG, "WiFi status notification sent (interval: %ds, presence: %s, recent_connection: %s): %s", 
+                        wifi_interval, presence_detected ? "yes" : "no",
+                        has_recently_connected_ble_clients() ? "yes" : "no", json_status);
             } else {
                 // Send error status
                 send_wifi_status_notification("{\"status\":\"error\",\"error\":\"Failed to read WiFi status\"}");

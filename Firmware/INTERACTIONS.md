@@ -210,23 +210,23 @@ The WS2812 status LED follows a priority system where higher priority states ove
 ### Device Timing Constants
 
 ```c
-// Button press durations
-BLE_PAIRING_DURATION     = 5-10 seconds
-FACTORY_RESET_DURATION   = 10-30 seconds
-BYPASS_MODE_DURATION     = 30+ seconds
+// Button press durations (from defines.h)
+#define BUTTON_BLE_PAIRING_MIN_DURATION     5    // 5 seconds - Hold duration min to enter BLE pairing mode
+#define BUTTON_BLE_PAIRING_MAX_DURATION     10   // 10 seconds - Hold duration max to enter BLE pairing mode
+#define BUTTON_FACTORY_RESET_MIN_DURATION   10   // 10 seconds - Hold duration min to trigger factory reset confirmation  
+#define BUTTON_FACTORY_RESET_MAX_DURATION   30   // 30 seconds - Hold duration max to trigger factory reset confirmation
+#define BUTTON_BYPASS_MODE_MIN_DURATION     30   // 30 seconds - Hold duration min to enter technician bypass mode
 
-// Double-click detection
-DOUBLE_CLICK_INTERVAL    = 500ms max between clicks
-BUTTON_DEBOUNCE         = 50ms
+// Double-click detection (from defines.h)
+#define BUTTON_DOUBLE_CLICK_MAX_INTERVAL    500  // 500ms - Max time between clicks for double-click detection
+#define BUTTON_DEBOUNCE_MS                  50   // 50ms - Debounce time to prevent false button presses
 
-// Factory reset confirmation
-CONFIRMATION_TIMEOUT     = 5 seconds
+// Factory reset confirmation (from defines.h)
+#define FACTORY_RESET_CONFIRMATION_TIMEOUT 5000 // 5 seconds - Time window to confirm factory reset
 
-//BLE Pair mode Timeout 
-BLE_PAIRING_TIMEOUT = 60 seconds
-
-//SoftAP mode Timeout 
-SOFT_AP_TIMEOUT = 5 minutes
+// BLE pairing timeout (from defines.h)  
+#define BLE_PAIRING_TIMEOUT                 MIN_TO_US(1) // 1 minute - How long BLE pairing mode stays active
+#define SOFT_AP_TIMEOUT                     MIN_TO_US(5) // 5 minutes - How long SoftAP mode stays active
 ```
 
 ## Integration with Mobile Apps
