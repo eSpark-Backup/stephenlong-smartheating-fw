@@ -1218,12 +1218,12 @@ extern "C" void app_main(void)
     device_data_init();
     button_init();  // This now turns on sensor board power (GPIO10)
     
-    // Initialize sensors after power is applied to sensor board
-    ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
-    LD2410_init();
-    ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
-    ir_sensor_init();
-    heater_interface_init();
+    // // Initialize sensors after power is applied to sensor board
+    // ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
+    // LD2410_init();
+    // ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
+    // ir_sensor_init();
+    // heater_interface_init();
     
     // Initialize energy tracking system
     ESP_LOGI(DEVICE_TAG, "Initializing energy tracking system...");
@@ -1250,6 +1250,7 @@ extern "C" void app_main(void)
     // set_heater_mode(AUTO_MODE);
     
     comm_init();
+   
     
     // Create WiFi monitoring task for BLE auto-streaming
     if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
@@ -1265,6 +1266,9 @@ extern "C" void app_main(void)
     {
         ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
         wifi_init_sta(device_data.ssid, device_data.password);
+        vTaskDelay(pdMS_TO_TICKS(500)); 
+        // scan_wifi_ssids();
+
         thingsBoard_init();
     }
     else

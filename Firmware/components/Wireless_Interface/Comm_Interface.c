@@ -24,8 +24,17 @@ GateParameters* gateParams = NULL;
 static int bond_dev_num = 0;
 static esp_ble_bond_dev_t *bond_dev_list = NULL;
 
-
 bool uart_cmd_handler_flag = false;
+
+wifi_ap_record_t ap_info[20]; // max 20 APs
+ScanWifi filteredNetworks[20];
+uint16_t ap_count = 0;
+uint16_t number = 20;
+uint8_t filteredNetworksCount = 0;
+
+
+TaskHandle_t xWifiScanTaskHandle = NULL;
+
 
 char *cmdStringFetch[]  = {
     "NoCommand",
@@ -45,8 +54,22 @@ char *cmdStringFetch[]  = {
     "readSystemDiagnostics",
     "readEnergyMetrics",
     "controlFrontLED",
-    "readDeviceInfo"
+    "readDeviceInfo",
+    "scanWifiSSIDs"
 };
+
+void wifi_scan_task(void *pvParameters)
+{
+    if(scan_wifi_ssids() != ESP_OK)
+    {
+        ESP_LOGE(TAG " WIFI SCAN", "WIFI SCAN FAILED");
+    }
+    else{
+        ESP_LOGI(TAG " WIFI SCAN", "WIFI SCAN PASSED");
+    }
+    vTaskDelete(NULL);
+}
+
 
 void ble_command_task(void * pvParameters)
 {
@@ -77,9 +100,12 @@ void comm_init(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+
+
     start_ble();
 
-    // Create the task for the IR sensor
+
+
     if(xTaskCreate(ble_command_task, "ble_command_task", 4096, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create ble_command_task  task");
@@ -442,6 +468,20 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             ESP_LOGI(TAG, "CONTROL_FRONT_LED command received");
             break;
 
+        case WIFI_SCAN:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            ESP_LOGI(TAG, "WIFI_SCAN command received");
+                // Create the task for the IR sensor
+            if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
+            {
+                ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
+                break;
+            }
+
+
         default:
             blecmd = NO_COMMAND;
             break;
@@ -575,6 +615,23 @@ esp_err_t save_wifi_credentials(const char *ssid, const char *password)
     return ESP_OK;
 }
 
+
+esp_err_t send_ble_wifiSSID_notification(const char* wifiSSIDJSON )
+{
+    if(xWifiScanTaskHandle != NULL)
+    {
+        ESP_LOGW(TAG  " WIFI SCAN", "Sending Wifi SSID JSON on BLE Indicate");
+        if(send_wifi_ssid_notification(wifiSSIDJSON) == ESP_OK)
+        {
+            return ESP_OK;
+        }
+        else{
+            return ESP_FAIL;
+        }
+    }
+    return ESP_FAIL;
+}
+
 // BLE Temperature Data Streaming (12 bytes) - uses CCCD management
 void send_ble_temperature_notification(float ambient_temp, float object_temp)
 {
@@ -656,3 +713,123 @@ esp_err_t get_wifi_status(char *ssid_out, uint8_t *connected_out, int8_t *rssi_o
 }
 
 // Streaming functions are now implemented in ble.c with CCCD management
+
+
+
+const char* get_SSID_auth_mode(uint8_t authmode)
+{
+    switch (authmode)
+    {
+        case WIFI_AUTH_OPEN:
+            return "WIFI_AUTH_OPEN";
+        case WIFI_AUTH_WEP:
+            return "WIFI_AUTH_WEP";
+        case WIFI_AUTH_WPA_PSK:
+            return "WIFI_AUTH_WPA_PSK";
+        case WIFI_AUTH_WPA2_PSK:
+            return "WIFI_AUTH_WPA2_PSK";
+        case WIFI_AUTH_WPA_WPA2_PSK:
+            return "WIFI_AUTH_WPA_WPA2_PSK";
+        case WIFI_AUTH_ENTERPRISE:
+            return "WIFI_AUTH_ENTERPRISE";
+        case WIFI_AUTH_WPA3_PSK:
+            return "WIFI_AUTH_WPA3_PSK";
+        case WIFI_AUTH_WPA2_WPA3_PSK:
+            return "WIFI_AUTH_WPA2_WPA3_PSK";
+        case WIFI_AUTH_WAPI_PSK:
+            return "WIFI_AUTH_WAPI_PSK";
+        case WIFI_AUTH_OWE:
+            return "WIFI_AUTH_OWE";
+        case WIFI_AUTH_WPA3_ENT_192:
+            return "WIFI_AUTH_WPA3_ENT_192";
+        case WIFI_AUTH_WPA3_EXT_PSK:
+            return "WIFI_AUTH_WPA3_EXT_PSK";
+        case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+            return "WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE";
+        case WIFI_AUTH_DPP:
+            return "WIFI_AUTH_DPP";
+        case WIFI_AUTH_WPA3_ENTERPRISE:
+            return "WIFI_AUTH_WPA3_ENTERPRISE";
+        case WIFI_AUTH_WPA2_WPA3_ENTERPRISE:
+            return "WIFI_AUTH_WPA2_WPA3_ENTERPRISE";
+        case WIFI_AUTH_MAX:
+            return "WIFI_AUTH_MAX";
+        default:
+            return "UNKNOWN_AUTH_MODE";
+    }
+}
+
+
+char* create_wifi_scan_json(ScanWifi *networks, int count) {
+    // Root object
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "action", "scan_result");
+
+    // Array of networks
+    cJSON *networks_array = cJSON_CreateArray();
+    cJSON_AddItemToObject(root, "networks", networks_array);
+
+    for (int i = 0; i < count; i++) {
+        cJSON *net = cJSON_CreateObject();
+
+        cJSON_AddStringToObject(net, "ssid", networks[i].ssid);
+        cJSON_AddNumberToObject(net, "rssi", networks[i].rssi);
+        cJSON_AddStringToObject(net, "auth", networks[i].protectionMode);
+        
+        cJSON_AddItemToArray(networks_array, net);
+    }
+
+    // Convert to JSON string
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);  // Free cJSON structure
+
+    return json_str;  // You must free this with `free()` after use
+}
+
+esp_err_t scan_wifi_ssids()
+{
+    ESP_LOGW(TAG " WIFI SCAN", "Scanning Wifi Networks");
+    
+    wifi_scan_config_t scan_config = {
+        .ssid = 0,
+        .bssid = 0,
+        .channel = 0,
+        .show_hidden = true
+    };
+
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true)); // Blocking scan
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+    
+    ESP_LOGI(TAG " WIFI SCAN", "Found %d networks", ap_count);
+
+    for (uint8_t i = 0; i < ap_count; ++i) {
+        bool found = false;
+        for (uint8_t j = 0; j < filteredNetworksCount; ++j) {
+            if (!strcmp((char *)ap_info[i].ssid, filteredNetworks[j].ssid)) {
+                found = true;
+                if (ap_info[i].rssi > filteredNetworks[j].rssi) {
+                    filteredNetworks[j].rssi = ap_info[i].rssi; // update if stronger
+                }
+                break;
+            }
+        }
+        if (!found && strlen((char *)ap_info[i].ssid) > 0) {
+            strncpy(filteredNetworks[filteredNetworksCount].ssid, (char *)ap_info[i].ssid, 32);
+            filteredNetworks[filteredNetworksCount].ssid[32] = '\0';
+            filteredNetworks[filteredNetworksCount].rssi = ap_info[i].rssi;
+            uint8_t protectionType = ap_info[i].authmode;
+            filteredNetworks[filteredNetworksCount].protectionMode= get_SSID_auth_mode(protectionType);
+            filteredNetworksCount++;
+        }
+    }
+
+    ESP_LOGI(TAG " WIFI SCAN", "Filtered count: %d", filteredNetworksCount);
+    const char* wifiSSIDJSON = create_wifi_scan_json(filteredNetworks ,filteredNetworksCount);
+    ESP_LOGI(TAG " WIFI SCAN", "SSID JSON: %s",wifiSSIDJSON);
+    if(send_ble_wifiSSID_notification(wifiSSIDJSON) == ESP_OK)
+    {
+            return ESP_OK;
+    }
+    else{   return ESP_FAIL; }
+}

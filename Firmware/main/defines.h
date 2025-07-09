@@ -203,6 +203,7 @@ typedef enum {
     READ_ENERGY_METRICS = 15,    // 0x0F - Read Energy Metrics (NEW)
     CONTROL_FRONT_LED = 16,      // 0x10 - Control Front LED (NEW)
     READ_DEVICE_INFO = 17,       // 0x11 - Read Device Information (NEW)
+    WIFI_SCAN = 18 ,             // 0x12 - Scans Wifi SSIDS and sends JSON on indicate
     MAX_BLE_CMDS
 }BLE_COMMANDS;
 

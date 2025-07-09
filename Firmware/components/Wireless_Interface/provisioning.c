@@ -473,3 +473,6 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
     free(json_string);
     cJSON_Delete(json);
 }
+
+
+

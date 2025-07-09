@@ -404,6 +404,35 @@ static void gatts_herschel_event_handler(esp_gatts_cb_event_t event, esp_gatt_if
 //
 // Notification Functions
 //
+
+esp_err_t send_wifi_ssid_notification(const char* wifiSSIDJSON)
+{
+    int8_t notifications_sent = 0;
+    for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
+        if (client_states[i].is_active) {
+            esp_err_t ret = esp_ble_gatts_send_indicate(
+                client_states[i].gatts_if,
+                client_states[i].conn_id,
+                herschel_handle_table[IDX_CONTROL_POINT_VAL],
+                sizeof(wifiSSIDJSON),
+                (uint8_t*)wifiSSIDJSON,
+                false
+            );
+            if (ret == ESP_OK)
+            {
+                 notifications_sent++; 
+                 return ESP_OK; 
+            }
+            else{ 
+                return ESP_FAIL;
+            }
+        }
+    }
+    return ESP_FAIL;
+
+}
+
+
 void send_temperature_stream_notification(uint32_t timestamp, float ambient_temp, float object_temp) {
     if (timestamp == 0) return;
 
