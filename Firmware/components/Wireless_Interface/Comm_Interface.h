@@ -92,7 +92,14 @@ typedef struct {
     char ssid[33];
     int8_t rssi;
     const char* protectionMode;
+    uint8_t networkChannnel;
 }ScanWifi;
+
+extern TaskHandle_t xWifiScanTaskHandle;
+extern const char* wifiSSIDJSON; 
+extern bool scanInProgress;
+extern bool scanfinsihed;
+
 
 void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
@@ -108,7 +115,7 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len);
 void send_ble_temperature_notification(float ambient_temp, float object_temp);
 void send_ble_presence_notification(uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
 void send_temperature_stream_notification(uint32_t timestamp, float ambient_temp, float object_temp);
-esp_err_t send_wifi_ssid_notification(const char* wifiSSIDJSON);
+esp_err_t send_wifi_ssid_JSON_notification(const char* wifiSSIDJSON);
 void send_presence_stream_notification(uint32_t timestamp, uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
 void send_wifi_status_notification(const char *json_status);
 
@@ -128,6 +135,7 @@ esp_err_t load_wifi_credentials(char *ssid, char *password);
 esp_err_t save_wifi_credentials(const char *ssid, const char *password);
 esp_err_t get_wifi_status(char *ssid_out, uint8_t *connected_out, int8_t *rssi_out, uint32_t *ip_address_out, uint8_t *internet_available_out);
 esp_err_t scan_wifi_ssids();
+void wifi_scan_task(void *pvParameters);
 
 
 void start_softap_provisioning(void);
@@ -136,6 +144,7 @@ httpd_handle_t start_webserver(void);
 httpd_handle_t stop_webserver(void);
 esp_err_t post_handler(httpd_req_t *req);
 esp_err_t get_handler(httpd_req_t *req);
+esp_err_t scan_results_handler(httpd_req_t *req);
 void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 
 

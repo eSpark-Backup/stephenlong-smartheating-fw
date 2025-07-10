@@ -25,15 +25,25 @@ static int bond_dev_num = 0;
 static esp_ble_bond_dev_t *bond_dev_list = NULL;
 
 bool uart_cmd_handler_flag = false;
-
+    
 wifi_ap_record_t ap_info[20]; // max 20 APs
 ScanWifi filteredNetworks[20];
+const char* wifiSSIDJSON;
 uint16_t ap_count = 0;
 uint16_t number = 20;
+uint16_t scanStartTime;
+uint16_t scanFinishedTime;
+uint16_t scanProgesstime;
+uint16_t totalScanTime;
 uint8_t filteredNetworksCount = 0;
 
-
 TaskHandle_t xWifiScanTaskHandle = NULL;
+TaskHandle_t xWifiScanDurationHandle= NULL;
+
+bool wifiScanAction = false;
+bool scanStart=false;
+bool scanfinsihed=false;
+bool scanInProgress=false;
 
 
 char *cmdStringFetch[]  = {
@@ -66,6 +76,34 @@ void wifi_scan_task(void *pvParameters)
     }
     else{
         ESP_LOGI(TAG " WIFI SCAN", "WIFI SCAN PASSED");
+    }
+    vTaskDelete(NULL);
+}
+
+void scanDuration_task (void *pvParameters)
+{
+    while(1)
+    {
+        if(scanStart)
+        {
+            scanStartTime = US_TO_SEC(esp_timer_get_time());
+            scanStart=false;
+            scanInProgress=true;
+        }
+        else if(scanInProgress)
+        {
+            scanProgesstime = US_TO_SEC(esp_timer_get_time()) - scanStartTime;
+            ESP_LOGI(TAG " WIFI SCAN", "Scan in Progress ! Time: %d", scanProgesstime);
+        }
+        else if(scanfinsihed)
+        {   
+            scanfinsihed = false;
+            scanFinishedTime = US_TO_SEC(esp_timer_get_time());
+            totalScanTime= scanFinishedTime -scanStartTime;
+            ESP_LOGI(TAG " WIFI SCAN", "Total Wifi Scan time: %d seconds", totalScanTime);
+            vTaskDelete(NULL);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // Delay for 1 second
     }
     vTaskDelete(NULL);
 }
@@ -473,6 +511,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            wifiScanAction=true;
             ESP_LOGI(TAG, "WIFI_SCAN command received");
                 // Create the task for the IR sensor
             if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
@@ -616,12 +655,12 @@ esp_err_t save_wifi_credentials(const char *ssid, const char *password)
 }
 
 
-esp_err_t send_ble_wifiSSID_notification(const char* wifiSSIDJSON )
+esp_err_t send_ble_wifi_SSID_JSON_notification(const char* wifiSSIDJSON )
 {
     if(xWifiScanTaskHandle != NULL)
     {
         ESP_LOGW(TAG  " WIFI SCAN", "Sending Wifi SSID JSON on BLE Indicate");
-        if(send_wifi_ssid_notification(wifiSSIDJSON) == ESP_OK)
+        if(send_wifi_ssid_JSON_notification(wifiSSIDJSON) == ESP_OK)
         {
             return ESP_OK;
         }
@@ -775,6 +814,7 @@ char* create_wifi_scan_json(ScanWifi *networks, int count) {
         cJSON_AddStringToObject(net, "ssid", networks[i].ssid);
         cJSON_AddNumberToObject(net, "rssi", networks[i].rssi);
         cJSON_AddStringToObject(net, "auth", networks[i].protectionMode);
+        cJSON_AddNumberToObject(net, "channel", networks[i].networkChannnel);
         
         cJSON_AddItemToArray(networks_array, net);
     }
@@ -797,12 +837,18 @@ esp_err_t scan_wifi_ssids()
         .show_hidden = true
     };
 
+    if(xTaskCreate(scanDuration_task, "scanDuration_task", 2048, NULL, 2, &xWifiScanDurationHandle) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create heater interface task");
+    }
+
+    scanStart=true;
     ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true)); // Blocking scan
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
     
     ESP_LOGI(TAG " WIFI SCAN", "Found %d networks", ap_count);
-
+    
     for (uint8_t i = 0; i < ap_count; ++i) {
         bool found = false;
         for (uint8_t j = 0; j < filteredNetworksCount; ++j) {
@@ -820,16 +866,30 @@ esp_err_t scan_wifi_ssids()
             filteredNetworks[filteredNetworksCount].rssi = ap_info[i].rssi;
             uint8_t protectionType = ap_info[i].authmode;
             filteredNetworks[filteredNetworksCount].protectionMode= get_SSID_auth_mode(protectionType);
+            filteredNetworks[filteredNetworksCount].networkChannnel= ap_info[i].primary;
             filteredNetworksCount++;
         }
     }
-
+    
     ESP_LOGI(TAG " WIFI SCAN", "Filtered count: %d", filteredNetworksCount);
-    const char* wifiSSIDJSON = create_wifi_scan_json(filteredNetworks ,filteredNetworksCount);
+    wifiSSIDJSON = create_wifi_scan_json(filteredNetworks ,filteredNetworksCount);
     ESP_LOGI(TAG " WIFI SCAN", "SSID JSON: %s",wifiSSIDJSON);
-    if(send_ble_wifiSSID_notification(wifiSSIDJSON) == ESP_OK)
+    scanInProgress=false;
+    scanfinsihed=true;
+    
+    if(wifiScanAction) // if scan triggered from BLE
     {
+        if(send_ble_wifi_SSID_JSON_notification(wifiSSIDJSON) == ESP_OK)
+        {   
+            ESP_LOGI(TAG " WIFI SCAN", "Successfully Sent Network Scan Notification");
+            wifiScanAction=false;
             return ESP_OK;
+        }
+        else{   
+            ESP_LOGE(TAG " WIFI SCAN", "Failed to Send Network Scan Notification");
+            wifiScanAction=false;
+            return ESP_FAIL; 
+        }
     }
-    else{   return ESP_FAIL; }
+    return ESP_OK;
 }
