@@ -403,6 +403,38 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 - `SSID`: Connected network name (string, variable length)
 - `IP_ADDR`: Assigned IP address (uint32, 4 bytes, network byte order)
 
+
+#### Wifi Network Scan (0x12)
+
+- **Command**: `0x12`
+- **MTU Required**: `512` 
+- **Response Format**: 
+    ```
+    {
+      "action":"scan_result", 
+      "networks":[
+        {"ssid":"MyNetwork","rssi":-45,"auth":"WPA2","channel":6},
+        {"ssid":"Neighbor","rssi":-67,"auth":"WPA3","channel":11}
+      ]
+    }
+    ```
+- **Description**: Scans Network around the user and return their SSIDs,RSSI,Security and channel in JSON ,  if the JSON size exceedes the MTU the JSON is sent in chunks
+
+    For example:
+    ```
+    [1/2]{
+      "action":"scan_result", 
+      "networks":[
+        {"ssid":"MyNetwork","rssi":-45,"auth":"WPA2","channel":6},
+        {"ssid":"Neighbor","rssi":-67
+    ```
+    ```
+    [2/2],"auth":"WPA3","channel":11}
+      ]
+    }
+    ```
+
+
 #### Read System Diagnostics (0x0E)
 
 - **Command**: `0x0E`
@@ -434,6 +466,8 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 - **Command**: `0x11`
 - **Response**: `0x11 [NAME_LEN] [NAME] [MODEL_LEN] [MODEL] [FW_VERSION] [MAC_ADDR]`
 - **Description**: Device identification and version information
+
+
 
 ---
 
