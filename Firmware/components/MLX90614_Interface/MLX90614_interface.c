@@ -11,12 +11,13 @@
 #include "ble.h"
 #include "app.h"
 #include "defines.h"
+#include "Heater_interface.h"
 
 #define TAG "IR_SENSOR"
 
 #define NEGATIVE_FILTER_CHECK(var)                  \
         do {                                        \
-            if ((var) >= 0) {                       \
+            if ((var) >= 0 && !isnan(var)) {       \
                 CircularBuffer_Push(&dataBuffer##var, (var)); \
             }                                       \
         } while (0)
@@ -144,8 +145,8 @@ void ir_sensor_task(void * pvParameters)
     while(1)
     {
         vTaskDelay(pdMS_TO_TICKS(1000)); // Keep 1s for sensor reading and monitoring
-        float Ta = -1;
-        float To = -1;
+        float Ta = NAN;
+        float To = NAN;
         uint16_t ir1 = 0;
         uint16_t ir2 = 0;
         int error = ESP_OK;
@@ -195,6 +196,15 @@ void ir_sensor_task(void * pvParameters)
         if (ta_result == ESP_OK && to_result == ESP_OK && ir1_result == ESP_OK && ir2_result == ESP_OK) {
             successful_reads++;
         }
+        
+        // Additional validation: check for NaN values even if read was successful
+        if (!isnan(Ta) && !isnan(To)) {
+            // Values are valid numbers, continue processing
+        } else {
+            ESP_LOGW(TAG, "NaN detected in sensor readings: Ta=%s, To=%s", 
+                     isnan(Ta) ? "NaN" : "OK", isnan(To) ? "NaN" : "OK");
+            continue; // Skip this iteration if we have NaN values
+        }
 
         // Use existing error handling macro
         if (error != ESP_OK) {
@@ -224,34 +234,53 @@ void ir_sensor_task(void * pvParameters)
         // Smart logging: Track temperature changes for shock detection
         static float last_operative_temp = 0.0f;
         static bool first_reading = true;
-        bool temperature_shock = false;
 
-        if (!first_reading) {
+        if (!first_reading && !isnan(Toperative) && !isnan(last_operative_temp)) {
             float temp_change = fabsf(Toperative - last_operative_temp);
             if (temp_change > 2.0f) {  // >2°C change in 1 second
-                temperature_shock = true;
                 ESP_LOGW(TAG, "TEMPERATURE SHOCK: %.2f°C change! Was: %.2f°C, Now: %.2f°C",
                          temp_change, last_operative_temp, Toperative);
             }
         }
-        last_operative_temp = Toperative;
+        
+        if (!isnan(Toperative)) {
+            last_operative_temp = Toperative;
+        }
         first_reading = false;
 
         // Print detailed metrics periodically
         printMLX90614DetailedMetrics(Ta, To, ir1, ir2, Toperative, restartCount);
 
-        // Send BLE temperature streaming notification every 5 seconds
+        // Send BLE temperature streaming notification with adaptive timing
         // Only send if we have valid temperature readings and enough time has passed
         int64_t current_time = esp_timer_get_time() / 1000; // Convert to milliseconds
-        int64_t ble_interval_ms = BLE_STREAMING_INTERVAL * 1000; // Fixed 5-second interval for BLE
+        
+        // Determine BLE streaming interval based on presence and activity (matches telemetry pattern)
+        bool presence_detected = get_presence_detected();
+        static int64_t last_activity_time = 0;
+        static int ble_interval = BLE_STREAMING_NORMAL_TIME;
+        
+        // Check if any client connected within the first minute - if so, use fast interval
+        if (has_recently_connected_ble_clients()) {
+            ble_interval = BLE_FIRST_MINUTE_TIME;
+        } else if (presence_detected) {
+            last_activity_time = current_time;
+            ble_interval = BLE_STREAMING_PRESENCE_TIME;
+        } else if (current_time - last_activity_time < NO_ACTIVITY_TIME_MS) {
+            ble_interval = BLE_STREAMING_NORMAL_TIME;
+        } else {
+            ble_interval = BLE_STREAMING_IDLE_TIME;
+        }
+        
+        int64_t ble_interval_ms = ble_interval * 1000;
 
         if (current_time - last_ble_notification_time >= ble_interval_ms) {
             // Only send BLE notifications if there are active BLE clients connected
             if (has_active_ble_clients()) {
                 send_ble_temperature_notification(Ta, To);
-                bool presence_detected = get_presence_detected();
-                ESP_LOGD(TAG, "BLE temp notification sent (interval: %ds, presence: %s)",
-                        BLE_STREAMING_INTERVAL, presence_detected ? "yes" : "no");
+                ESP_LOGD(TAG, "BLE temp notification sent (interval: %ds, presence: %s, recent_connection: %s)",
+                        ble_interval, presence_detected ? "yes" : "no",
+                        has_recently_connected_ble_clients() ? "yes" : "no");
             } else {
                 ESP_LOGD(TAG, "BLE temp notification skipped - no active clients");
             }
@@ -343,24 +372,48 @@ void internal_temp_sensor_init(void)
 
 float get_operative_temp(void)
 {
-    float Ta = 0;
-    float To = 0;
-    float Toperative = 0;
+    float Ta = NAN;
+    float To = NAN;
+    float Toperative = NAN;
 
     CircularBuffer_Retrieve(&dataBufferTa, &Ta);
     CircularBuffer_Retrieve(&dataBufferTo, &To);
-    Toperative = (0.5 * Ta) + (0.5 * To);
-
-    // Only log for debugging specific issues - removed to reduce spam
-    // ESP_LOGD(TAG, "Ta: %.2f, To: %.2f", Ta, To);
-    // ESP_LOGD(TAG, "Toperative: %.2f", Toperative);
+    
+    // Get current heater state to determine calculation method
+    HEATER_STATE heater_state = get_heater_state();
+    
+    // Adaptive operative temperature calculation based on heating element status:
+    //
+    // When heating elements are ON, use object temperature only (Toperative = To):
+    // - Heating elements generate localized heat that affects ambient sensor readings
+    // - MLX90614 ambient sensor measures air temperature near the sensor, which becomes
+    //   artificially elevated due to heating element proximity and convection
+    // - Object temperature (infrared) remains accurate as it measures radiant heat from
+    //   the actual target surface, unaffected by local air temperature changes
+    // - Using only object temperature prevents control oscillations caused by 
+    //   heating-induced ambient temperature spikes
+    //
+    // When heating elements are OFF, use traditional average (Toperative = (Ta + To)/2):
+    // - Both ambient and object sensors provide accurate readings without heating interference
+    // - Traditional operative temperature calculation balances air and radiant temperatures
+    // - Provides more comprehensive thermal comfort assessment when system is at equilibrium
+    
+    if (heater_state != HEATER_OFF) {
+        // Heating elements are active - use object temperature only to avoid heating interference
+        Toperative = To;
+        ESP_LOGD(TAG, "Heating ON - Using To: %.2f°C (State: %s)", To, get_enum_name(ENUM_HEATER_STATE, heater_state));
+    } else {
+        // Heating elements are off - use traditional calculation for balanced thermal assessment
+        Toperative = (0.5 * Ta) + (0.5 * To);
+        ESP_LOGD(TAG, "Heating OFF - Using (Ta+To)/2: %.2f°C", Toperative);
+    }
 
     return Toperative;
 }
 
 float get_ambient_temp(void)
 {
-    float Ta = 0;
+    float Ta = NAN;
 
     CircularBuffer_Retrieve(&dataBufferTa, &Ta);
 
@@ -371,7 +424,7 @@ float get_ambient_temp(void)
 
 float get_object_temp(void)
 {
-    float To = 0;
+    float To = NAN;
 
     CircularBuffer_Retrieve(&dataBufferTo, &To);
 
@@ -440,9 +493,9 @@ float CircularBuffer_Peek(circular_buffer_t* cb, int index)
 {
     if (CircularBuffer_IsEmpty(cb) || index < 0 || index >= BUFFER_SIZE)
     {
-        // Buffer empty or invalid index; return 0 or handle error
+        // Buffer empty or invalid index; return NaN or handle error
         ESP_LOGE("CircularBuffer", "Peek error: buffer empty or invalid index");
-        return -1; // or some error value
+        return NAN; // Invalid value
         // return 0; // or some error value
     }
 
@@ -454,9 +507,9 @@ float CircularBuffer_Retrieve(circular_buffer_t* cb, float *data)
 {
     if (CircularBuffer_IsEmpty(cb))
     {
-        // Buffer empty or invalid index; return 0 or handle error
+        // Buffer empty or invalid index; return NaN or handle error
         ESP_LOGE("CircularBuffer", "Retrieve error: buffer empty");
-        return -1; // or some error value
+        return NAN; // Invalid value
         // return 0; // or some error value
     }
 

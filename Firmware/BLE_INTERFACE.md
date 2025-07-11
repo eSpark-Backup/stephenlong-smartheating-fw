@@ -7,6 +7,8 @@
 
 This document defines the Bluetooth® Low Energy GATT services for Herschel Infrared heater control and monitoring. The services provide Wi-Fi provisioning, device control, and sensor data streaming functionality specifically designed for infrared heating applications.
 
+**For complete heater operational behavior, control logic, and mobile app integration guidelines, see [modes.md](modes.md).**
+
 The implementation follows Nordic Semiconductor patterns and is compatible with standard BLE development frameworks.
 
 **Firmware Features:**
@@ -54,8 +56,8 @@ This service implements Wi-Fi credential provisioning using the Nordic UART Serv
 
 ### Wi-Fi Characteristic Properties
 
-| Characteristic        | Properties                    | Security            |
-| --------------------- | ----------------------------- | ------------------- |
+| Characteristic        | Properties                    | Security              |
+| --------------------- | ----------------------------- | --------------------- |
 | RX (Credential Input) | Write, Write Without Response | Just Works encryption |
 | TX (Status Output)    | Notify, Read                  | Just Works encryption |
 
@@ -114,8 +116,8 @@ This service provides device control commands and sensor data streaming for infr
 
 ### Herschel Characteristic Properties
 
-| Characteristic   | Properties      | Security         |
-| ---------------- | --------------- | ---------------- |
+| Characteristic   | Properties      | Security              |
+| ---------------- | --------------- | --------------------- |
 | Control Point    | Write, Indicate | Just Works encryption |
 | Response         | Notify, Read    | Just Works encryption |
 | Temperature Data | Notify, Read    | Just Works encryption |
@@ -181,7 +183,7 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 
 **Streaming Intervals**:
 
-- **BLE Data Streaming**: Fixed 5-second intervals for both temperature and presence
+- **BLE Data Streaming**: Adaptive intervals (5s when presence detected, 30s normal, 5min idle)
 - **Other Telemetry**: Smart intervals (10s presence, 30s normal, up to 10min idle)
 
 #### Presence Data Stream
@@ -201,7 +203,7 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 
 **Streaming Intervals**:
 
-- **Current Implementation**: 5 seconds for both temperature and presence data
+- **Current Implementation**: Adaptive timing - 5s when presence detected, 30s normal, 5min idle
 - **Automatic**: No configuration required, streams immediately on connection
 - **Multi-Client**: All connected clients receive identical data streams
 
@@ -264,13 +266,65 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 
 - **Command**: `0x05 [TEMP_FLOAT]`
 - **Response**: `0x05 0xA1` (success) or `0x05 0xA2` (failed)
-- **Description**: Sets target temperature for controller
+- **Description**: Sets target temperature for controller with special UI trigger values
+
+**Temperature Range**: UI_MIN to UI_MAX for normal operation (currently 0°C to 35°C)
+
+**Special Trigger Values** (relative to UI temperature range):
+
+- **Restore Trigger**: `UI_MIN - 2.0` - Switches to auto mode
+- **Off Trigger**: `UI_MIN - 1.0` - Sets manual mode with heater off
+- **Boost Trigger**: `UI_MAX + 1.0` - Sets manual mode with heater high
+
+**Response Behavior**:
+
+- **All operations**: Returns only status (`0xA1` success or `0xA2` failed)
+- **Normal temperatures (UI_MIN to UI_MAX)**: Stores temperature in NVS and returns success
+- **Restore trigger (UI_MIN - 2.0)**: Sets device to auto mode and returns success
+- **Off/Boost triggers (UI_MIN - 1.0, UI_MAX + 1.0)**: Sets manual mode with specified heater state and returns success
+- **Invalid range**: Returns `0xA2` (failed) status
+
+**Usage Examples** (with UI_MIN=0°C, UI_MAX=35°C):
+
+- Set 22°C: `0x05 [22.0f]` → Response: `0x05 0xA1` (temperature stored)
+- Off trigger: `0x05 [-1.0f]` → Response: `0x05 0xA1` (heater turns off, stored temp unchanged)
+- Boost trigger: `0x05 [36.0f]` → Response: `0x05 0xA1` (heater on high, stored temp unchanged)
+- Restore trigger: `0x05 [-2.0f]` → Response: `0x05 0xA1` (switches to auto mode)
+
+**Implementation Notes**:
+
+- SET_TARGET_TEMP only returns status - use GET_TARGET_TEMP to read current values
+- Trigger values are calculated relative to UI_MIN_TEMP_CELSIUS and UI_MAX_TEMP_CELSIUS constants
+- Off and Boost triggers preserve the previously stored target temperature
+- Restore trigger enables automatic temperature control using the stored target temperature
+- All trigger operations immediately affect device mode and heater state
 
 #### Get Target Temperature (0x06)
 
 - **Command**: `0x06`
 - **Response**: `0x06 [TEMP_FLOAT]`
-- **Description**: Reads current target temperature setting
+- **Description**: Reads current target temperature or trigger value based on device mode and state
+
+**Response Behavior**:
+
+- **Auto Mode**: Returns the actual stored target temperature from NVS
+- **Manual Mode - Heater OFF**: Returns off trigger value (`UI_MIN - 1.0`)
+- **Manual Mode - Heater HIGH**: Returns boost trigger value (`UI_MAX + 1.0`)
+- **Manual Mode - Other States**: Returns the actual stored target temperature
+
+**Usage Examples** (with UI_MIN=0°C, UI_MAX=35°C):
+
+- Auto mode with 22°C stored: `0x06` → Response: `0x06 [22.0f]`
+- Manual mode, heater off: `0x06` → Response: `0x06 [-1.0f]` (off trigger)
+- Manual mode, heater high: `0x06` → Response: `0x06 [36.0f]` (boost trigger)
+- Manual mode, heater mid/low: `0x06` → Response: `0x06 [22.0f]` (stored temperature)
+
+**Implementation Notes**:
+
+- This command reflects the current UI state - what value the UI should display
+- In manual off/boost modes, returns the trigger values to maintain UI consistency
+- Use this command after SET_TARGET_TEMP operations to confirm current display value
+- Trigger values are calculated relative to UI_MIN_TEMP_CELSIUS and UI_MAX_TEMP_CELSIUS constants
 
 #### Set Operating Mode (0x07)
 
@@ -284,6 +338,8 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 - `0x01`: Manual (direct relay control via commands)
 - `0x02`: Auto (internal logic with target temp + presence)
 - `0x03`: Bypass (full power on boot, no control logic)
+
+**For detailed operating mode behavior, control logic, and mobile app integration, see [modes.md](modes.md).**
 
 #### Get Operating Mode (0x08)
 
@@ -347,6 +403,38 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 - `SSID`: Connected network name (string, variable length)
 - `IP_ADDR`: Assigned IP address (uint32, 4 bytes, network byte order)
 
+
+#### Wifi Network Scan (0x12)
+
+- **Command**: `0x12`
+- **MTU Required**: `512` 
+- **Response Format**: 
+    ```
+    {
+      "action":"scan_result", 
+      "networks":[
+        {"ssid":"MyNetwork","rssi":-45,"auth":"WPA2","channel":6},
+        {"ssid":"Neighbor","rssi":-67,"auth":"WPA3","channel":11}
+      ]
+    }
+    ```
+- **Description**: Scans Network around the user and return their SSIDs,RSSI,Security and channel in JSON ,  if the JSON size exceedes the MTU the JSON is sent in chunks
+
+    For example:
+    ```
+    [1/2]{
+      "action":"scan_result", 
+      "networks":[
+        {"ssid":"MyNetwork","rssi":-45,"auth":"WPA2","channel":6},
+        {"ssid":"Neighbor","rssi":-67
+    ```
+    ```
+    [2/2],"auth":"WPA3","channel":11}
+      ]
+    }
+    ```
+
+
 #### Read System Diagnostics (0x0E)
 
 - **Command**: `0x0E`
@@ -379,6 +467,8 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 - **Response**: `0x11 [NAME_LEN] [NAME] [MODEL_LEN] [MODEL] [FW_VERSION] [MAC_ADDR]`
 - **Description**: Device identification and version information
 
+
+
 ---
 
 ## Usage Workflow
@@ -409,28 +499,14 @@ Temperature and Presence data streams automatically without requiring CCCD subsc
 
 ## Error Handling
 
-### Sensor Recovery
+**BLE Protocol Error Handling**:
 
-**MLX90614 Temperature Sensor**:
+- Failed notifications are logged but don't stop streaming
+- Client disconnections automatically cleanup streaming state
+- Robust multi-client connection management
+- Use diagnostic commands (0x0B, 0x0D, 0x0E) for system monitoring
 
-- Monitor for invalid readings (< -70°C or > 300°C)
-- Use command 0x0B to power cycle sensor board
-- Automatic recovery built into device firmware
-
-**System Health Monitoring**:
-
-- Use command 0x0D for Wi-Fi connectivity monitoring
-- Use command 0x0E for memory and uptime monitoring
-- Monitor Wi-Fi signal strength for connectivity issues
-- Track reset reasons for failure analysis
-
-### Safety Features
-
-**Automatic Shutdowns**:
-
-- Internal temperature > 90°C triggers heating shutdown
-- Wi-Fi disconnection > 5 minutes triggers heating shutdown
-- BLE disconnection > 5 minutes triggers heating shutdown
+**For complete safety systems, sensor recovery, and operational contexts, see [modes.md](modes.md).**
 
 ---
 

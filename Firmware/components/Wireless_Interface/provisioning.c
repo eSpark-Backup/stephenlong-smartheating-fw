@@ -21,7 +21,7 @@ void start_softap_provisioning(void)
     strncpy((char *)wifi_config.ap.ssid, SSID_WIFI, sizeof(wifi_config.ap.ssid));
     strcpy((char *)wifi_config.ap.password, PASS_WIFI);
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
@@ -35,6 +35,13 @@ void start_softap_provisioning(void)
 void stop_softap_provisioning(void)
 {
     stop_webserver();
+    
+    // Validate saved credentials before attempting connection
+    if (strlen(device_data.ssid) == 0 || strlen(device_data.password) == 0) {
+        ESP_LOGE(DEVICE_TAG, "Invalid saved WiFi credentials - SSID or password is empty");
+        return;
+    }
+    
     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
     wifi_init_sta(device_data.ssid, device_data.password);
     set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
@@ -48,8 +55,11 @@ httpd_handle_t start_webserver(void)
     {
         httpd_uri_t uri_get = {.uri = "/", .method = HTTP_GET, .handler = get_handler};
         httpd_uri_t uri_post = {.uri = "/set", .method = HTTP_POST, .handler = post_handler};
+        httpd_uri_t uri_scan_results = {.uri = "/scan_results",.method = HTTP_GET,.handler = scan_results_handler};
         httpd_register_uri_handler(server, &uri_get);
         httpd_register_uri_handler(server, &uri_post);
+        httpd_register_uri_handler(server, &uri_scan_results);
+
     }
     else
     {
@@ -117,17 +127,132 @@ esp_err_t post_handler(httpd_req_t *req)
 
 esp_err_t get_handler(httpd_req_t *req)
 {
-    const char *html = "<html>\
-        <head><title>ESP32 WiFi Provisioning</title></head>\
-        <body>\
-        <h2>Enter WiFi Credentials</h2>\
-        <form action='/set' method='POST'>\
-            SSID: <input type='text' name='ssid'><br>\
-            Password: <input type='password' name='password'><br>\
-            <input type='submit' value='Submit'>\
-        </form>\
-        </body></html>";
+const char *html =
+"<!DOCTYPE html>"
+"<html lang='en'>"
+"<head>"
+"<meta charset='UTF-8'>"
+"<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+"<title>HERSCHEL PORTAL</title>"
+"<style>"
+"body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f8; color: #333; padding: 20px; }"
+"h1 { text-align: center; color: #2c3e50; }"
+"form, .networks { max-width: 400px; margin: 20px auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }"
+"label { display: block; margin-bottom: 8px; font-weight: bold; }"
+"input[type='text'], input[type='password'] { width: 100%; padding: 10px; margin-bottom: 16px; border: 1px solid #ccc; border-radius: 4px; }"
+"input[type='submit'], button { width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }"
+"input[type='submit']:hover, button:hover { background-color: #2980b9; }"
+"ul { list-style: none; padding: 0; }"
+"li { padding: 10px; display: flex; flex-direction: column; border-bottom: 1px solid #eee; cursor: pointer; }"
+"li:hover { background-color: #f1f1f1; }"
+".top { display: flex; justify-content: space-between; align-items: center; }"
+".signal-icon { font-size: 20px; margin-left: 10px; }"
+".locked { color: #e74c3c; margin-left: 5px; }"
+".details { font-size: 12px; color: #777; margin-top: 4px; }"
+"#loader { text-align: center; margin-top: 20px; }"
+".spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }"
+"@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }"
+"</style>"
+"</head>"
+"<body>"
+
+"<h1>HERSCHEL PORTAL</h1>"
+
+"<form action='/set' method='POST'>"
+"<label for='ssid'>WiFi SSID:</label>"
+"<input type='text' name='ssid' id='ssid' required>"
+"<label for='password'>WiFi Password:</label>"
+"<input type='password' name='password' id='password'>"
+"<input type='submit' value='Connect'>"
+"</form>"
+
+"<div class='networks'>"
+"<button onclick='loadNetworks()'>🔍 Scan for Available Networks</button>"
+"<div id='networks'><div id='loader' style='display:none;'><div class='spinner'></div><p>Scanning...</p></div></div>"
+"</div>"
+
+"<script>"
+"function getSignalIcon(rssi) {"
+"  if (rssi >= -50) return '📶📶📶📶';"
+"  else if (rssi >= -60) return '📶📶📶';"
+"  else if (rssi >= -70) return '📶📶';"
+"  else if (rssi >= -80) return '📶';"
+"  else return '📶❌';"
+"}"
+
+"function getSignalQualityLabel(rssi) {"
+"  if (rssi >= -50) return 'Very High';"
+"  else if (rssi >= -60) return 'High';"
+"  else if (rssi >= -70) return 'Medium';"
+"  else if (rssi >= -80) return 'Low';"
+"  else return 'Very Low';"
+"}"
+
+"function loadNetworks() {"
+"  const networksDiv = document.getElementById('networks');"
+"  networksDiv.innerHTML = `<div id='loader'><div class='spinner'></div><p>Scanning...</p></div>`;"
+"  fetch('/scan_results')"
+"    .then(response => response.json())"
+"    .then(data => {"
+"      let html = '<ul>';"
+"      data.networks.forEach(n => {"
+"        const icon = getSignalIcon(n.rssi);"
+"        const quality = getSignalQualityLabel(n.rssi);"
+"        const lock = n.auth !== 0 ? '<span class=\\\"locked\\\">🔒</span>' : '';"
+"        html += `<li onclick='fillSSID(\\\"${n.ssid}\\\")'>"
+"          <div class='top'>"
+"            <span>${n.ssid} ${lock}</span>"
+"            <span class='signal-icon'>${icon}</span>"
+"          </div>"
+"          <div class='details'>${quality} Signal</div>"
+"        </li>`;"
+"      });"
+"      html += '</ul>';"
+"      networksDiv.innerHTML = html;"
+"    })"
+"    .catch(err => {"
+"      networksDiv.innerHTML = '<p style=\\\"color:red\\\">Failed to load networks.</p>';"
+"      console.error('Error fetching networks:', err);"
+"    });"
+"}"
+
+"function fillSSID(ssid) {"
+"  document.getElementById('ssid').value = ssid;"
+"  window.scrollTo({ top: 0, behavior: 'smooth' });"
+"}"
+"</script>"
+
+"</body></html>";
+
+
+
+
     httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+esp_err_t scan_results_handler(httpd_req_t *req)
+{
+    // char *json = create_wifi_scan_json(filteredNetworks, filteredNetworksCount);
+    if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
+        return ESP_FAIL;
+    } 
+    vTaskDelay(pdMS_TO_TICKS(500)); // Delay for 1 second
+    while(scanInProgress && !scanfinsihed){
+        vTaskDelay(pdMS_TO_TICKS(10)); // Delay for 1 second
+    };
+    if(strlen(wifiSSIDJSON) > 0){
+        ESP_LOGI(TAG WIFI_TAG, "Sending Network JSON on Portal");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, wifiSSIDJSON, HTTPD_RESP_USE_STRLEN);
+    }
+    else
+    {
+        ESP_LOGE(TAG WIFI_TAG, "Empty Network JSON detected");
+    }
+    free(wifiSSIDJSON);
     return ESP_OK;
 }
 
@@ -170,6 +295,10 @@ void event_handler(void *arg, esp_event_base_t event_base,
         // Exit BLE pairing mode and restore normal operation
         set_led_status_flag("pairing_mode_active", false);
         set_led_status_flag("normal_operation", true);
+
+        // For development: Keep BLE advertising active even after WiFi connects
+        ESP_LOGI(TAG WIFI_TAG, "Restarting BLE advertising for development access");
+        startBLEAdvert();
 
         // Send JSON connected status
         send_wifi_status_json("connected", NULL, NULL);
@@ -256,8 +385,8 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
     {
         if ( temp_char_handle == herschel_handle_table[IDX_CONTROL_POINT_VAL])
         {
-            ESP_LOGD(GATTS_TAG, "calling 'uart'");
-            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "uart");
+            ESP_LOGD(GATTS_TAG, "calling 'ble'");
+            parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "ble");
         }
         else if ( temp_char_handle == wifi_handle_table[IDX_WIFI_RX_VAL])
         {
@@ -361,10 +490,26 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
     // Send connecting status
     send_wifi_status_json("connecting", ssid_item->valuestring, NULL);
 
+    // Double-check credentials before calling wifi_init_sta
+    if (ssid_item->valuestring == NULL || password_item->valuestring == NULL) {
+        ESP_LOGE(GATTS_TAG, "SSID or password valuestring is NULL after validation");
+        send_wifi_status_json("failed", NULL, "Internal error");
+        cJSON_Delete(json);
+        return;
+    }
+
+    // Copy strings to local variables before freeing JSON memory
+    char ssid_copy[WIFI_SSID_MAX_LEN];
+    char password_copy[WIFI_PASS_MAX_LEN];
+    strncpy(ssid_copy, ssid_item->valuestring, sizeof(ssid_copy) - 1);
+    strncpy(password_copy, password_item->valuestring, sizeof(password_copy) - 1);
+    ssid_copy[sizeof(ssid_copy) - 1] = '\0';  // Ensure null termination
+    password_copy[sizeof(password_copy) - 1] = '\0';  // Ensure null termination
+
     cJSON_Delete(json); // Free memory
 
-    // Initialize WiFi with new credentials
-    wifi_init_sta(ssid_item->valuestring, password_item->valuestring);
+    // Initialize WiFi with copied credentials
+    wifi_init_sta(ssid_copy, password_copy);
 }
 
 void send_wifi_status_json(const char *status, const char *ssid, const char *error)
@@ -446,3 +591,6 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
     free(json_string);
     cJSON_Delete(json);
 }
+
+
+

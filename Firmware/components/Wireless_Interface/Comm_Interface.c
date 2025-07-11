@@ -24,8 +24,27 @@ GateParameters* gateParams = NULL;
 static int bond_dev_num = 0;
 static esp_ble_bond_dev_t *bond_dev_list = NULL;
 
-
 bool uart_cmd_handler_flag = false;
+    
+wifi_ap_record_t ap_info[20]; // max 20 APs
+ScanWifi filteredNetworks[20];
+const char* wifiSSIDJSON;
+uint16_t ap_count = 0;
+uint16_t number = 20;
+uint16_t scanStartTime;
+uint16_t scanFinishedTime;
+uint16_t scanProgesstime;
+uint16_t totalScanTime;
+uint8_t filteredNetworksCount = 0;
+
+TaskHandle_t xWifiScanTaskHandle = NULL;
+TaskHandle_t xWifiScanDurationHandle= NULL;
+
+bool wifiScanAction = false;
+bool scanStart=false;
+bool scanfinsihed=false;
+bool scanInProgress=false;
+
 
 char *cmdStringFetch[]  = {
     "NoCommand",
@@ -45,8 +64,50 @@ char *cmdStringFetch[]  = {
     "readSystemDiagnostics",
     "readEnergyMetrics",
     "controlFrontLED",
-    "readDeviceInfo"
+    "readDeviceInfo",
+    "scanWifiSSIDs"
 };
+
+void wifi_scan_task(void *pvParameters)
+{
+    if(scan_wifi_ssids() != ESP_OK)
+    {
+        ESP_LOGE(TAG " WIFI SCAN", "WIFI SCAN FAILED");
+    }
+    else{
+        ESP_LOGI(TAG " WIFI SCAN", "WIFI SCAN PASSED");
+    }
+    vTaskDelete(NULL);
+}
+
+void scanDuration_task (void *pvParameters)
+{
+    while(1)
+    {
+        if(scanStart)
+        {
+            scanStartTime = US_TO_SEC(esp_timer_get_time());
+            scanStart=false;
+            scanInProgress=true;
+        }
+        else if(scanInProgress)
+        {
+            scanProgesstime = US_TO_SEC(esp_timer_get_time()) - scanStartTime;
+            ESP_LOGI(TAG " WIFI SCAN", "Scan in Progress ! Time: %d", scanProgesstime);
+        }
+        else if(scanfinsihed)
+        {   
+            scanfinsihed = false;
+            scanFinishedTime = US_TO_SEC(esp_timer_get_time());
+            totalScanTime= scanFinishedTime -scanStartTime;
+            ESP_LOGI(TAG " WIFI SCAN", "Total Wifi Scan time: %d seconds", totalScanTime);
+            vTaskDelete(NULL);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // Delay for 1 second
+    }
+    vTaskDelete(NULL);
+}
+
 
 void ble_command_task(void * pvParameters)
 {
@@ -56,8 +117,10 @@ void ble_command_task(void * pvParameters)
 
         if(uart_cmd_handler_flag)
         {
-            printf("EXECUTING COMMAND\n");
+            ESP_LOGI(TAG, "EXECUTING COMMAND: 0x%02X", blecmd);
             execute_command();
+            uart_cmd_handler_flag = false; // Reset flag after execution
+            ESP_LOGI(TAG, "COMMAND EXECUTION COMPLETE: 0x%02X", blecmd);
         }
     }
     vTaskDelete( NULL );
@@ -75,9 +138,12 @@ void comm_init(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+
+
     start_ble();
 
-    // Create the task for the IR sensor
+
+
     if(xTaskCreate(ble_command_task, "ble_command_task", 4096, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create ble_command_task  task");
@@ -289,7 +355,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     blecmd = (BLE_COMMANDS)(uint8_t)packet[0];
 
     // Determine whether to allow command based on property
-    bool allow_all = (strcmp(property, "uart") == 0);
+    bool allow_all = (strcmp(property, "uart") == 0) || (strcmp(property, "ble") == 0);
     // bool cmd_wifi = (strcmp(property, "wifi") == 0);
     // bool cmd_uart = (strcmp(property, "uart") == 0);
 
@@ -342,10 +408,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 5) {  // Need command + 4 bytes for float
+                ESP_LOGE(TAG, "SET_TARGET_TEMP: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* temp_bytes = (char*)(malloc(4));
             if (!temp_bytes) {
-                ESP_LOGE(TAG, "Memory allocation failed for temperature parameters.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for temperature parameters!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(temp_bytes, &packet[1], 4);
             bleParameters[0] = temp_bytes;
@@ -356,10 +428,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "SET_RELAY_STATE: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* relay_state = (char*)(malloc(1));
             if (!relay_state) {
-                ESP_LOGE(TAG, "Memory allocation failed for relay state parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for relay state parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(relay_state, &packet[1], 1);
             bleParameters[0] = relay_state;
@@ -370,13 +448,20 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "SET_OPERATING_MODE: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* mode = (char*)(malloc(1));
             if (!mode) {
-                ESP_LOGE(TAG, "Memory allocation failed for operating mode parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for operating mode parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(mode, &packet[1], 1);
             bleParameters[0] = mode;
+            ESP_LOGI(TAG, "SET_OPERATING_MODE command parsed successfully, mode=%d", *mode);
             break;
 
         case CONTROL_SENSOR_BOARD:
@@ -384,10 +469,16 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "CONTROL_SENSOR_BOARD: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* sensor_control = (char*)(malloc(1));
             if (!sensor_control) {
-                ESP_LOGE(TAG, "Memory allocation failed for sensor board control parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for sensor board control parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(sensor_control, &packet[1], 1);
             bleParameters[0] = sensor_control;
@@ -399,15 +490,36 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
                 blecmd = NO_COMMAND;
                 break;
             }
+            if (len < 2) {  // Need command + parameter
+                ESP_LOGE(TAG, "CONTROL_FRONT_LED: insufficient data length %d", len);
+                blecmd = NO_COMMAND;
+                break;
+            }
             char* led_control = (char*)(malloc(1));
             if (!led_control) {
-                ESP_LOGE(TAG, "Memory allocation failed for LED control parameter.!\n");
-                return 0;
+                ESP_LOGE(TAG, "Memory allocation failed for LED control parameter!");
+                blecmd = NO_COMMAND;
+                break;
             }
             memcpy(led_control, &packet[1], 1);
             bleParameters[0] = led_control;
             ESP_LOGI(TAG, "CONTROL_FRONT_LED command received");
             break;
+
+        case WIFI_SCAN:
+            if (!allow_all) {
+                blecmd = NO_COMMAND;
+                break;
+            }
+            wifiScanAction=true;
+            ESP_LOGI(TAG, "WIFI_SCAN command received");
+                // Create the task for the IR sensor
+            if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
+            {
+                ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
+                break;
+            }
+
 
         default:
             blecmd = NO_COMMAND;
@@ -434,7 +546,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
 void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
 {
     uint8_t resp[1 + ((len == 0) ? 1: len)];
-    ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: status %d", status);
+    ESP_LOGI(TAG GATTS_TAG, "Sending BLE response for command 0x%02X, status=%d, len=%d", blecmd, status, len);
     ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: len %d", len);
 
     resp[0] = blecmd;
@@ -454,6 +566,9 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
     // Send to all active clients using the multi-client approach from ble.c
     int notifications_sent = 0;
 
+    ESP_LOGD(TAG GATTS_TAG, "Sending BLE response: status=%d, len=%d, using handle=%d", 
+             status, len, herschel_handle_table[IDX_RESPONSE_VAL]);
+
     for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
         if (client_states[i].is_active) {
             esp_err_t err = esp_ble_gatts_send_indicate(
@@ -461,13 +576,19 @@ void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
                 client_states[i].conn_id,
                 herschel_handle_table[IDX_RESPONSE_VAL],
                 sizeof(resp), resp, false);
-            if (err == ESP_OK) notifications_sent++;
-            else ESP_LOGE(TAG GATTS_TAG, "Failed to send BLE notification to client %d, error: %s", i, esp_err_to_name(err));
+            if (err == ESP_OK) {
+                notifications_sent++;
+                ESP_LOGD(TAG GATTS_TAG, "BLE response sent to client %d successfully", i);
+            } else {
+                ESP_LOGE(TAG GATTS_TAG, "Failed to send BLE notification to client %d, error: %s", i, esp_err_to_name(err));
+            }
         }
     }
 
     if (notifications_sent == 0) {
         ESP_LOGW(TAG GATTS_TAG, "No active BLE clients to send notification to");
+    } else {
+        ESP_LOGI(TAG GATTS_TAG, "BLE response sent to %d clients", notifications_sent);
     }
 }
 
@@ -481,8 +602,17 @@ void wifi_init_sta(const char *ssid, const char *password)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &instance_got_ip));
 
     wifi_config_t wifi_config = {0};
-    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
-    strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+    
+    // Check for null pointers to prevent crashes
+    if (ssid == NULL || password == NULL) {
+        ESP_LOGE(TAG WIFI_TAG, "wifi_init_sta: ssid or password is NULL");
+        return;
+    }
+    
+    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
+    strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+    wifi_config.sta.ssid[sizeof(wifi_config.sta.ssid) - 1] = '\0';  // Ensure null termination
+    wifi_config.sta.password[sizeof(wifi_config.sta.password) - 1] = '\0';  // Ensure null termination
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -522,6 +652,23 @@ esp_err_t save_wifi_credentials(const char *ssid, const char *password)
     nvs_close(nvs);
     ESP_LOGI(TAG WIFI_TAG, "WiFi credentials saved");
     return ESP_OK;
+}
+
+
+esp_err_t send_ble_wifi_SSID_JSON_notification(const char* wifiSSIDJSON )
+{
+    if(xWifiScanTaskHandle != NULL)
+    {
+        ESP_LOGW(TAG  " WIFI SCAN", "Sending Wifi SSID JSON on BLE Indicate");
+        if(send_wifi_ssid_JSON_notification(wifiSSIDJSON) == ESP_OK)
+        {
+            return ESP_OK;
+        }
+        else{
+            return ESP_FAIL;
+        }
+    }
+    return ESP_FAIL;
 }
 
 // BLE Temperature Data Streaming (12 bytes) - uses CCCD management
@@ -605,3 +752,144 @@ esp_err_t get_wifi_status(char *ssid_out, uint8_t *connected_out, int8_t *rssi_o
 }
 
 // Streaming functions are now implemented in ble.c with CCCD management
+
+
+
+const char* get_SSID_auth_mode(uint8_t authmode)
+{
+    switch (authmode)
+    {
+        case WIFI_AUTH_OPEN:
+            return "WIFI_AUTH_OPEN";
+        case WIFI_AUTH_WEP:
+            return "WIFI_AUTH_WEP";
+        case WIFI_AUTH_WPA_PSK:
+            return "WIFI_AUTH_WPA_PSK";
+        case WIFI_AUTH_WPA2_PSK:
+            return "WIFI_AUTH_WPA2_PSK";
+        case WIFI_AUTH_WPA_WPA2_PSK:
+            return "WIFI_AUTH_WPA_WPA2_PSK";
+        case WIFI_AUTH_ENTERPRISE:
+            return "WIFI_AUTH_ENTERPRISE";
+        case WIFI_AUTH_WPA3_PSK:
+            return "WIFI_AUTH_WPA3_PSK";
+        case WIFI_AUTH_WPA2_WPA3_PSK:
+            return "WIFI_AUTH_WPA2_WPA3_PSK";
+        case WIFI_AUTH_WAPI_PSK:
+            return "WIFI_AUTH_WAPI_PSK";
+        case WIFI_AUTH_OWE:
+            return "WIFI_AUTH_OWE";
+        case WIFI_AUTH_WPA3_ENT_192:
+            return "WIFI_AUTH_WPA3_ENT_192";
+        case WIFI_AUTH_WPA3_EXT_PSK:
+            return "WIFI_AUTH_WPA3_EXT_PSK";
+        case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+            return "WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE";
+        case WIFI_AUTH_DPP:
+            return "WIFI_AUTH_DPP";
+        case WIFI_AUTH_WPA3_ENTERPRISE:
+            return "WIFI_AUTH_WPA3_ENTERPRISE";
+        case WIFI_AUTH_WPA2_WPA3_ENTERPRISE:
+            return "WIFI_AUTH_WPA2_WPA3_ENTERPRISE";
+        case WIFI_AUTH_MAX:
+            return "WIFI_AUTH_MAX";
+        default:
+            return "UNKNOWN_AUTH_MODE";
+    }
+}
+
+
+char* create_wifi_scan_json(ScanWifi *networks, int count) {
+    // Root object
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "action", "scan_result");
+
+    // Array of networks
+    cJSON *networks_array = cJSON_CreateArray();
+    cJSON_AddItemToObject(root, "networks", networks_array);
+
+    for (int i = 0; i < count; i++) {
+        cJSON *net = cJSON_CreateObject();
+
+        cJSON_AddStringToObject(net, "ssid", networks[i].ssid);
+        cJSON_AddNumberToObject(net, "rssi", networks[i].rssi);
+        cJSON_AddStringToObject(net, "auth", networks[i].protectionMode);
+        cJSON_AddNumberToObject(net, "channel", networks[i].networkChannnel);
+        
+        cJSON_AddItemToArray(networks_array, net);
+    }
+
+    // Convert to JSON string
+    char *json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);  // Free cJSON structure
+
+    return json_str;  // You must free this with `free()` after use
+}
+
+esp_err_t scan_wifi_ssids()
+{
+    ESP_LOGW(TAG " WIFI SCAN", "Scanning Wifi Networks");
+    
+    wifi_scan_config_t scan_config = {
+        .ssid = 0,
+        .bssid = 0,
+        .channel = 0,
+        .show_hidden = true
+    };
+
+    if(xTaskCreate(scanDuration_task, "scanDuration_task", 2048, NULL, 2, &xWifiScanDurationHandle) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create heater interface task");
+    }
+
+    scanStart=true;
+    ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true)); // Blocking scan
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+    
+    ESP_LOGI(TAG " WIFI SCAN", "Found %d networks", ap_count);
+    
+    for (uint8_t i = 0; i < ap_count; ++i) {
+        bool found = false;
+        for (uint8_t j = 0; j < filteredNetworksCount; ++j) {
+            if (!strcmp((char *)ap_info[i].ssid, filteredNetworks[j].ssid)) {
+                found = true;
+                if (ap_info[i].rssi > filteredNetworks[j].rssi) {
+                    filteredNetworks[j].rssi = ap_info[i].rssi; // update if stronger
+                }
+                break;
+            }
+        }
+        if (!found && strlen((char *)ap_info[i].ssid) > 0) {
+            strncpy(filteredNetworks[filteredNetworksCount].ssid, (char *)ap_info[i].ssid, 32);
+            filteredNetworks[filteredNetworksCount].ssid[32] = '\0';
+            filteredNetworks[filteredNetworksCount].rssi = ap_info[i].rssi;
+            uint8_t protectionType = ap_info[i].authmode;
+            filteredNetworks[filteredNetworksCount].protectionMode= get_SSID_auth_mode(protectionType);
+            filteredNetworks[filteredNetworksCount].networkChannnel= ap_info[i].primary;
+            filteredNetworksCount++;
+        }
+    }
+    
+    ESP_LOGI(TAG " WIFI SCAN", "Filtered count: %d", filteredNetworksCount);
+    wifiSSIDJSON = create_wifi_scan_json(filteredNetworks ,filteredNetworksCount);
+    ESP_LOGI(TAG " WIFI SCAN", "SSID JSON: %s",wifiSSIDJSON);
+    scanInProgress=false;
+    scanfinsihed=true;
+    
+    if(wifiScanAction) // if scan triggered from BLE
+    {
+        if(send_ble_wifi_SSID_JSON_notification(wifiSSIDJSON) == ESP_OK)
+        {   
+            ESP_LOGI(TAG " WIFI SCAN", "Successfully Sent Network Scan Notification");
+            wifiScanAction=false;
+            return ESP_OK;
+        }
+        else{   
+            ESP_LOGE(TAG " WIFI SCAN", "Failed to Send Network Scan Notification");
+            wifiScanAction=false;
+            return ESP_FAIL; 
+        }
+    }
+    return ESP_OK;
+}

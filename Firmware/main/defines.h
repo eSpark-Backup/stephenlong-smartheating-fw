@@ -14,16 +14,16 @@ extern "C" {
 #define COMPANY_NAME                "HERSCHEL"
 #define COMPANY_ID                  0x0EC3
 
-// Device Attributes for ThingsBoard
-#define DEVICE_MODEL                "Vario Power Panel"
+// Device Attributes for ThingsBoard - HC-1200-VP Standard Configuration
+#define DEVICE_MODEL                "HC-1200-VP"
 #define FIRMWARE_VERSION            "1.0.0"
 #define HARDWARE_VERSION            "ESP32-C6"
 #define RATED_VOLTAGE               "240V AC"
 #define INSTALLATION_TYPE           "wall-mount"
-#define LOW_ELEMENT_NAME            "Low Power Element"
-#define HIGH_ELEMENT_NAME           "High Power Element"
-#define LOW_ELEMENT_ID              "heating_low"
-#define HIGH_ELEMENT_ID             "heating_high"
+#define LOW_ELEMENT_NAME            "Edge Element"
+#define HIGH_ELEMENT_NAME           "Center Element"
+#define LOW_ELEMENT_ID              "heating_edge"
+#define HIGH_ELEMENT_ID             "heating_center"
 
 #define IR_SENSOR_I2C_INTERFACE     I2C_NUM_0
 #define IR_SENSOR_I2C_ADDR1         0x5A         // Default sensor slave address
@@ -32,6 +32,10 @@ extern "C" {
 #define MAX_TEMP_VAL                125.00f
 #define MIN_TEMP_VAL                -40.00f
 #define SENSOR_BOARD_RESTART_COUNT   10
+
+// UI temperature range constants
+#define UI_MIN_TEMP_CELSIUS         0.0f    // 0°C minimum for UI
+#define UI_MAX_TEMP_CELSIUS         35.0f   // 35°C maximum for UI
 
 #define MOTION_SENSOR_IO            GPIO_NUM_23
 #define HEATER_HIGH_IO              19
@@ -129,16 +133,20 @@ extern "C" {
 #define NVS_KEY_TARGET_TEMP             "target_temp"
 #define NVS_KEY_DETECTION_DURATION      "detection_duration"
 
-// Energy measurement constants
-#define HEATING_LOW_WATTS          500.0f   // Watts for low heating element
-#define HEATING_HIGH_WATTS         1000.0f  // Watts for high heating element
+// Energy measurement constants - HC-1200-VP Configuration
+#define HEATING_LOW_WATTS          500.0f   // Watts for edge element (lower power)
+#define HEATING_HIGH_WATTS         700.0f   // Watts for center element (higher power)
 #define ENERGY_UPDATE_INTERVAL_MS  1000     // 1 second intervals for energy calculation
 
 // Telemetry interval constants (shared between BLE and ThingsBoard)
 #define NORMAL_TELEMETRY_TIME      30       // 30 seconds normal operation
 #define PRESENCE_TELEMETRY_TIME    10       // 10 seconds when presence detected
 #define IDLE_TELEMETRY_TIME        60       // 60 seconds increment when idle
-#define BLE_STREAMING_INTERVAL     5        // 5 seconds for BLE data streaming
+#define BLE_STREAMING_PRESENCE_TIME    5        // 5 seconds when presence detected
+#define BLE_STREAMING_NORMAL_TIME      30       // 30 seconds normal operation  
+#define BLE_STREAMING_IDLE_TIME        (5*60)   // 5 minutes when idle
+#define BLE_FIRST_MINUTE_TIME      5        // 5 seconds for first minute after BLE connection
+#define BLE_FIRST_MINUTE_DURATION  (60*1000)    // 60 seconds in milliseconds
 #define NO_ACTIVITY_TIME_MS        (10*60*1000)  // 10 minutes in milliseconds
 #define MAX_IDLE_INTERVAL          (10*60)       // 10 minutes max interval
 
@@ -195,6 +203,7 @@ typedef enum {
     READ_ENERGY_METRICS = 15,    // 0x0F - Read Energy Metrics (NEW)
     CONTROL_FRONT_LED = 16,      // 0x10 - Control Front LED (NEW)
     READ_DEVICE_INFO = 17,       // 0x11 - Read Device Information (NEW)
+    WIFI_SCAN = 18 ,             // 0x12 - Scans Wifi SSIDS and sends JSON on indicate
     MAX_BLE_CMDS
 }BLE_COMMANDS;
 

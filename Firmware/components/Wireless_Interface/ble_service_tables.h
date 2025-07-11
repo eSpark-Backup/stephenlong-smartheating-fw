@@ -3,6 +3,10 @@
 #include "esp_gatts_api.h"
 #include "esp_gatt_defs.h"
 
+
+#define CHAR_DECLARATION_SIZE (sizeof(uint8_t))
+#define CHAR_VAL_LEN_MAX 512
+
 // WiFi Provisioning Service Table Enums
 enum {
     IDX_WIFI_SVC,

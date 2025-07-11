@@ -1,6 +1,8 @@
 #include "ble_service_tables.h"
 #include "esp_gatt_common_api.h"
 
+
+
 // External UUID declarations (from ble.c)
 extern const uint8_t prov_service_uuid[16];
 extern const uint8_t wifi_rx_uuid[16];
@@ -30,9 +32,6 @@ static const uint8_t cccd_default[2] = {0x00, 0x00};
 
 // Default characteristic values
 static const uint8_t char_value_default[4] = {0x00, 0x00, 0x00, 0x00};
-
-#define CHAR_DECLARATION_SIZE (sizeof(uint8_t))
-#define CHAR_VAL_LEN_MAX 512
 
 //
 // WiFi Provisioning Service Table

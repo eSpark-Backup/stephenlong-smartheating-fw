@@ -1,0 +1,28 @@
+# Problem
+Analysis shows several critical timeout implementations are missing, causing the heater to get stuck in provisioning modes instead of returning to normal heating operation.
+
+# Missing Timeouts (Critical for Heating Operation)
+- BLE Pairing Mode:
+
+    * Timeout defined (60s) but check never executes
+    * Heater stays in pairing mode indefinitely instead of resuming heating
+    * Code exists: BLE_PAIRING_TIMEOUT = 60000 and ble_pairing_start_time variable, but no timeout check in button_task()
+
+- SoftAP Mode:
+
+    * No timeout implementation at all
+    * Heater stuck in SoftAP provisioning, can't heat rooms
+    * Need to add timeout constant, tracking, and exit logic
+
+- What Needs Implementation:
+
+    * Add BLE timeout check in button_task() - the variables exist but timeout logic missing
+    * Implement SoftAP timeout - completely missing (suggest 5-10 minutes)
+    * Auto-return to heating operation after provisioning timeouts
+    * Update INTERACTIONS.md to document timeout behaviors
+
+# Impact
+
+- When users can't complete WiFi setup, the heater gets stuck in provisioning mode and won't heat. Need reliable fallback to normal operation so heating continues working even if network setup fails.
+
+- The infrastructure is mostly there for BLE timeout - just missing the actual timeout check in the button task loop.
