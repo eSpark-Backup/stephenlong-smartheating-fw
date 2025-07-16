@@ -1,44 +1,97 @@
-# Smart Heating System Firmware Development
-## Instructions
-- Flash the esp32c6 with the provided binaries.
-- Once the device is flashed with the updated firmware, navigate to your mobile to wifi and bluetooth discovery. Device with name `HERSCHEL_000001` will appear.
-- Now connect to the softAP connection by entering the password `12345678`.
-- Once connected, open any browser and open url `192.168.4.1`.
-- A web page will be opened, enter ssid and password there and click on submit.
-- If the creds are correct, the device will be connected to the wifi network.
-- Open nrf connect and you can still see your device there. Conenct to your device.
-- There's a service appearing from which you can write wifi creds in json format like given below:
+# ESP32-C6 Vario Power Panel Firmware
+
+Advanced infrared heater control system with comprehensive sensor integration and cloud connectivity.
+
+## Hardware Architecture
+
+### Core Components
+
+- **ESP32-C6-WROOM-1 microcontroller** (8MB flash)
+- **MLX90614 3V ESF-BAA IR temperature sensor** (non-contact infrared, TO-39 package)
+- **Hi-Link LD2410C 24GHz mmWave radar sensor** (5V, UART and binary output for still and moving presence detection)
+- **WS2812 Addressable RGB Status LED**
+- **MOSFET for MLX90614 power control**
+- **240V AC Relay control** for dual heating elements
+- **Pairing Button** (GPIO switch with long-press detection)
+
+### Board Configuration
+
+| Component                  | GPIO Pins | Notes                                                                |
+| -------------------------- | --------- | -------------------------------------------------------------------- |
+| Heating Low Relay          | GPIO18    | Controls lower power element                                         |
+| Heating High Relay         | GPIO19    | Controls higher power element                                        |
+| I2C Data (SDA)             | GPIO21    | MLX90614 communication                                               |
+| I2C Clock (SCL)            | GPIO22    | MLX90614 communication                                               |
+| Sensor Board Power Control | GPIO10    | Controls MOSFET for sensor board power (MLX90614 and LD2410 sensors) |
+| Presence UART TX           | GPIO17    | LD2410C UART Transmit                                                |
+| Presence UART RX           | GPIO16    | LD2410C UART Receive                                                 |
+| Binary Presence Output     | GPIO23    | LD2410C Binary Output                                                |
+| Status LED Data In         | GPIO11    | WS2812 RGB LED Data In                                               |
+| Pairing Button             | GPIO2     | Input for pairing and factory reset                                  |
+
+## Development Environment
+
+This project uses **ESP-IDF v5.4.1** for ESP32-C6 development.
+
+### Build Commands
+
+All commands should be run from this directory (`c6-vario/`):
+
+- **Setup ESP-IDF environment**: `get_idf` (or `source ~/esp/esp-idf/export.sh`)
+- **Build project**: `idf.py build`
+- **Flash firmware**: `idf.py -p /dev/cu.usbmodemXXXX flash` (macOS) or `idf.py -p COMXX flash` (Windows)
+- **Monitor serial output**: `idf.py -p /dev/cu.usbmodemXXXX monitor`
+- **Flash and monitor**: `idf.py -p /dev/cu.usbmodemXXXX flash monitor`
+- **Erase flash**: `idf.py -p /dev/cu.usbmodemXXXX erase-flash`
+- **Full clean build**: `idf.py fullclean && idf.py build`
+
+**Note**: The ESP-IDF environment must be activated before running build commands.
+
+### Port Detection
+
+Use `ls /dev/cu.usbmodem*` on macOS to find the correct USB serial port.
+
+## Project Structure
+
+```text
+c6-vario/
+├── components/           # ESP-IDF Components
+│   ├── App/              # Device configuration and NVS management
+│   ├── Heater_Interface/ # Relay control and automatic heating logic
+│   ├── LD2410_interface/ # mmWave presence sensor integration
+│   ├── MLX90614_Interface/ # IR temperature sensor with filtering
+│   ├── Status_led/       # WS2812 LED status indication
+│   ├── ThingsBoard/      # Cloud telemetry and HTTP API
+│   └── Wireless_Interface/ # BLE services and WiFi provisioning
+├── libraries/            # Hardware driver libraries
+│   ├── LD2410b_driver/   # mmWave radar sensor driver
+│   ├── LED_strip_encoder/ # WS2812 LED driver
+│   └── MLX90614_driver/  # IR temperature sensor driver
+├── main/                 # Application entry point
+│   ├── app_main.cpp      # Main application and BLE command execution
+│   └── defines.h         # GPIO definitions and system constants
+├── schematic/           # Hardware schematics and designs
+├── BLE_INTERFACE.md      # Complete BLE specification and commands
+├── INTERACTIONS.md       # User interaction guide (button, LED, pairing)
+└── THINGSBOARD_SCHEMA.md # Cloud integration data structure
 ```
-{
-    "ssid": "abc_network",
-    "password": "xyz_password"
-}
-```
 
-## Build Instructions
-- Clone a repository and go to folder `c6-vario` in the ESP-IDF CMD or PowerShell.
-- Run `idf.py build` to build your project.
-- Run `idf.py -p COMXX flash` to flash your esp32c6 chip.
-- Run `idf.py -p COMXX monitor` to monitor your serial monitor.
-- Else you can also run `idf.py -p COMXX flash monitor` to flash and monitor your serial monitor.
-- Once the Wifi Provisioning is done, to bring your controller in SoftAP provisioning mode you have to erase your esp32c6 chip with the following command, `idf.py -p COMXX erase-flash`.
-- However, you can always update your wifi credentials through ble since it is always turned on.
+## Connectivity
 
-## UART SERVICE:
-- UUID : 7e400001-b5a3-f393-e0a9-e50e24dcca9e
+The ESP32-C6 connects to ThingsBoard IoT platform for device management and control. The device supports BLE and WiFi provisioning for network setup.
 
-- This serviced is developed on the nordic uart service pattern
+### Provisioning Methods
 
-- Contains 2 characteristics (Tx and Rx) and required descriptors
+- **Primary**: BLE provisioning (Company ID: 0x0EC3, Device: `HERSCHEL_000001`)
+- **Fallback**: WiFi Access Point (SoftAP) mode
 
-- Rx Characteristic requires Notifications to be enabled from the BLE client
+For detailed provisioning procedures and user interactions, see [INTERACTIONS.md](INTERACTIONS.md).
 
-- In-order to send data larger than 20 bytes , BLE client is required to request larger MTU size (as per the requirement) from the UART service.
+## Documentation References
 
-#### Rx Characteristic:
-- UUID : 7e400002-b5a3-f393-e0a9-e50e24dcca9e
-- Properties: Notify
+**Complete Product Documentation:**
 
-#### Tx Characteristic:
-- UUID : 7e400003-b5a3-f393-e0a9-e50e24dcca9e
-- Properties: Write
+- **[BLE_INTERFACE.md](BLE_INTERFACE.md)**: BLE API specification, commands, and data streaming
+- **[INTERACTIONS.md](INTERACTIONS.md)**: Button controls, LED patterns, and user interface
+- **[modes.md](modes.md)**: Operating modes, heating control logic, and safety systems
+- **[THINGSBOARD_SCHEMA.md](THINGSBOARD_SCHEMA.md)**: Cloud platform integration and data structures

@@ -1,17 +1,22 @@
 {
   "configurations": [
     {
-      "name": "windows-gcc-x64",
+      "name": "ESP-IDF",
+      "compilerPath": "${config:idf.toolsPathWin}\\tools\\riscv32-esp-elf\\esp-14.2.0_20241119\\riscv32-esp-elf\\bin\\riscv32-esp-elf-gcc.exe",
+      "compileCommands": "${config:idf.buildPath}/compile_commands.json",
       "includePath": [
-        "${workspaceFolder}/**", "C:/Users/eSpark/esp/v5.4.1/esp-idf/**"
+        "${config:idf.espIdfPath}/components/**",
+        "${config:idf.espIdfPathWin}/components/**",
+        "${workspaceFolder}/**"
       ],
-      "compilerPath": "C:/gcc/bin/gcc.exe",
-      "cStandard": "${default}",
-      "cppStandard": "${default}",
-      "intelliSenseMode": "windows-gcc-x64",
-      "compilerArgs": [
-        ""
-      ]
+      "browse": {
+        "path": [
+          "${config:idf.espIdfPath}/components",
+          "${config:idf.espIdfPathWin}/components",
+          "${workspaceFolder}"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      }
     }
   ],
   "version": 4

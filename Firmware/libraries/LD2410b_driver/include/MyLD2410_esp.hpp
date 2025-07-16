@@ -152,7 +152,7 @@ private:
   bool sendCommand(const byte *command);
   bool processAck();
   bool processData();
-  
+
   public:
   /**
    * @brief Construct a new MyLD2410 object
@@ -161,16 +161,16 @@ private:
    * @param debug - a flag that controls whether debug data will be sent to Serial
    */
   //   MyLD2410(Stream &serial, bool debug = false);
-  
+
   //   // CONTROLS
-  
+
   //   /**
   //    * @brief Call this function in setup() to ascertain whether the device is responding
   //    */
   esp_err_t uartInit(uart_port_t uart_num ,int UART_TX ,int UART_RX , int BAUD_RATE );
-  
+
   bool begin();
-  
+
 
 //   /**
 //    * @brief Call this function to gracefully close the sensor. Useful for entering sleep mode.
@@ -436,9 +436,9 @@ private:
 //    * @brief Begin the automatic threshold detection routine
 //    * (firmware >= 2.44)
 //    *
-//    * @param _timeout - allow for timeout [s] to leave the room 
+//    * @param _timeout - allow for timeout [s] to leave the room
 //    * @return true on success
-//    */ 
+//    */
 //   bool autoThresholds(byte _timeout = 10);
 
 //   /**

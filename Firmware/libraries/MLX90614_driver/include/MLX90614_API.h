@@ -33,6 +33,6 @@ int MLX90614_GetIIR(uint8_t slaveAddr, uint8_t *iir);
 int MLX90614_SetIIR(uint8_t slaveAddr, uint8_t value);
 float MLX90614_TemperatureInFahrenheit(float temperature);
 int16_t MLX90614_ConvertIRdata(uint16_t ir);
-    
+
 #endif
 
