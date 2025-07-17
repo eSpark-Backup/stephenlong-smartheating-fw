@@ -4,6 +4,8 @@
 #include <esp_log.h>
 #include "esp_timer.h"
 
+#define TAG     DEVICE_TAG
+
 device_data_t device_data = {0};
 
 esp_err_t device_data_init(void)
@@ -14,7 +16,7 @@ esp_err_t device_data_init(void)
     esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READONLY, &nvs);
     if (err != ESP_OK)
     {
-        ESP_LOGE(DEVICE_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
         if(err == ESP_ERR_NVS_NOT_FOUND)
         {
             err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
@@ -24,9 +26,9 @@ esp_err_t device_data_init(void)
             nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
             nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
             nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
-            ESP_LOGW(DEVICE_TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
-            ESP_LOGW(DEVICE_TAG, "Target temp not set. Setting to 0.");
-            ESP_LOGW(DEVICE_TAG, "Presence detection duration val not set 0.");
+            ESP_LOGW(TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+            ESP_LOGW(TAG, "Target temp not set. Setting to 0.");
+            ESP_LOGW(TAG, "Presence detection duration val not set 0.");
             nvs_commit(nvs);
         }
         // return err;
@@ -37,7 +39,7 @@ esp_err_t device_data_init(void)
         if (err != ESP_OK)
         {
             device_data.mode = MANUAL_MODE;
-            ESP_LOGE(DEVICE_TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+            ESP_LOGE(TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
             nvs_set_i8(nvs, NVS_KEY_MODE, device_data.mode);
             nvs_commit(nvs);
         }
@@ -46,7 +48,7 @@ esp_err_t device_data_init(void)
         if (err != ESP_OK)
         {
             device_data.target_temp = 0;
-            ESP_LOGE(DEVICE_TAG, "Target temp not set. Setting to 0.");
+            ESP_LOGE(TAG, "Target temp not set. Setting to 0.");
             nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
             nvs_commit(nvs);
         }
@@ -54,27 +56,27 @@ esp_err_t device_data_init(void)
         if (err != ESP_OK)
         {
             device_data.duration_val = 0;
-            ESP_LOGE(DEVICE_TAG, "Presence detection duration val not set 0.");
+            ESP_LOGE(TAG, "Presence detection duration val not set 0.");
             nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
             nvs_commit(nvs);
         }
     }
 
-    ESP_LOGW(DEVICE_TAG, "Device mode: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
-    ESP_LOGW(DEVICE_TAG, "Target temp: %0.2f", device_data.target_temp);
-    ESP_LOGW(DEVICE_TAG, "Presence detection duration val: %x", device_data.duration_val);
+    ESP_LOGW(TAG, "Device mode: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+    ESP_LOGW(TAG, "Target temp: %0.2f", device_data.target_temp);
+    ESP_LOGW(TAG, "Presence detection duration val: %x", device_data.duration_val);
 
     nvs_close(nvs);
 
     err = load_wifi_credentials(device_data.ssid, device_data.password);
     if(err == ESP_OK)
     {
-        ESP_LOGW(DEVICE_TAG, "WiFi credentials loaded.");
-        ESP_LOGW(DEVICE_TAG, "SSID: %s", device_data.ssid);
-        ESP_LOGW(DEVICE_TAG, "Password: %s", device_data.password);
+        ESP_LOGW(TAG, "WiFi credentials loaded.");
+        ESP_LOGW(TAG, "SSID: %s", device_data.ssid);
+        ESP_LOGW(TAG, "Password: %s", device_data.password);
     }
 
-    ESP_LOGI(DEVICE_TAG, "Device data initialized.");
+    ESP_LOGI(TAG, "Device data initialized.");
 
     return err;
 }
@@ -90,9 +92,8 @@ esp_err_t device_data_set(uint8_t op)
     esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
     if (err != ESP_OK)
     {
-        ESP_LOGE(DEVICE_TAG, "Failed to open NVS: %s", esp_err_to_name(err));
-        set_device_status(1, ERROR);
-        set_led_effect(LED_EFFECT_BLINK, RED ,NO_SPEED );
+        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        set_led_status_flag("error_nvs", true);
         return err;
     }
     if(op == 0)
@@ -121,7 +122,8 @@ esp_err_t device_data_set(uint8_t op)
 
 esp_err_t reset_device_and_erase_nvs()
 {
-    set_led_effect(LED_EFFECT_BLINK, PURPLE ,LED_SPEED_FAST );
+    // set_led_effect(LED_EFFECT_BLINK, PURPLE, LED_SPEED_FAST);
+    set_led_status_flag("erase_nvs", true);
     esp_err_t err;
 
     // Erase all NVS partitions
@@ -138,7 +140,7 @@ esp_err_t reset_device_and_erase_nvs()
 void set_target_temp(float target_temp)
 {
     device_data.target_temp = target_temp;
-    ESP_LOGD(DEVICE_TAG, "Target temperature set to: %.2f", device_data.target_temp);
+    ESP_LOGD(TAG, "Target temperature set to: %.2f", device_data.target_temp);
 
     device_data_set(1);
 }
@@ -152,7 +154,7 @@ void set_detection_duration(uint8_t duration_val)
 {
     // device_data.target_temp = target_temp;
     device_data.duration_val = duration_val;
-    ESP_LOGD(DEVICE_TAG, "Presence Detection Duration time set to: %x", device_data.duration_val);
+    ESP_LOGD(TAG, "Presence Detection Duration time set to: %x", device_data.duration_val);
 
 
     device_data_set(2);
@@ -182,7 +184,7 @@ esp_err_t get_device_credentials(char *token)
     esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READONLY, &nvs);
     if (err != ESP_OK)
     {
-        ESP_LOGE(HTTPS_TAG, "No saved credentials found");
+        ESP_LOGE(TAG HTTPS_TAG, "No saved credentials found");
         return err;
     }
 
@@ -198,14 +200,14 @@ esp_err_t save_device_credentials(const char *token)
     esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READWRITE, &nvs);
     if (err != ESP_OK)
     {
-        ESP_LOGE(HTTPS_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG HTTPS_TAG, "Error opening NVS: %s", esp_err_to_name(err));
         return err;
     }
 
     nvs_set_str(nvs, "token", token);
     nvs_commit(nvs);
     nvs_close(nvs);
-    ESP_LOGI(HTTPS_TAG, "HTTPS Provisioning Token saved");
+    ESP_LOGI(TAG HTTPS_TAG, "HTTPS Provisioning Token saved");
     return ESP_OK;
 }
 

@@ -55,7 +55,7 @@ httpd_handle_t start_webserver(void)
     {
         httpd_uri_t uri_get = {.uri = "/", .method = HTTP_GET, .handler = get_handler};
         httpd_uri_t uri_post = {.uri = "/set", .method = HTTP_POST, .handler = post_handler};
-        httpd_uri_t uri_scan_results = {.uri = "/scan_results",.method = HTTP_GET,.handler = scan_results_handler};
+        httpd_uri_t uri_scan_results = {.uri = "/scan_results", .method = HTTP_GET, .handler = scan_results_handler};
         httpd_register_uri_handler(server, &uri_get);
         httpd_register_uri_handler(server, &uri_post);
         httpd_register_uri_handler(server, &uri_scan_results);

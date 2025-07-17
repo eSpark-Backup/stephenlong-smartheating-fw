@@ -222,8 +222,8 @@ uint8_t LD2410_getStationaryEnergy() {
 }
 
 
-bool LD2410_init(){
-
+bool LD2410_init()
+{
     // Allow time for LD2410 sensor to power up after MOSFET enable
     ESP_LOGI(TAG, "Waiting for LD2410 sensor to power up...");
     vTaskDelay(pdMS_TO_TICKS(1000));  // 1000ms delay for sensor power-up
@@ -255,8 +255,7 @@ bool LD2410_init(){
     if(xTaskCreate(LD2410Task, "LD2410Task", 8192, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
-        set_device_status(1, ERROR);
-        set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
+        set_led_status_flag("error_ir_sensor", true);
         return false;
     }
     getDetectionRange();

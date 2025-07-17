@@ -66,27 +66,27 @@ static bool softAPOngoing= false;
 // LED feedback state tracking
 static bool button_led_feedback_active = false;
 
-// Centralized LED Status Flags
-static led_status_flags_t led_flags = {
-    .error_critical = false,
-    .error_ir_sensor = false,
-    .error_heating = false,
-    .button_ble_feedback = false,
-    .button_factory_reset_feedback = false,
-    .button_bypass_feedback = false,
-    .button_softap_feedback = false,
-    .pairing_mode_active = false,
-    .firmware_update = false,
-    .factory_reset_confirmation = false,
-    .bypass_mode_active = false,
-    .normal_operation = false,
-    .wifi_connected = false,
-    .wifi_warning = false
-};
-static SemaphoreHandle_t led_flags_mutex = NULL;
+// // Centralized LED Status Flags
+// static led_status_flags_t led_flags = {
+//     .error_critical = false,
+//     .error_ir_sensor = false,
+//     .error_heating = false,
+//     .button_ble_feedback = false,
+//     .button_factory_reset_feedback = false,
+//     .button_bypass_feedback = false,
+//     .button_softap_feedback = false,
+//     .pairing_mode_active = false,
+//     .firmware_update = false,
+//     .factory_reset_confirmation = false,
+//     .bypass_mode_active = false,
+//     .normal_operation = false,
+//     .wifi_connected = false,
+//     .wifi_warning = false
+// };
+// static SemaphoreHandle_t led_flags_mutex = NULL;
 
 // LED Manager Task Handle
-static TaskHandle_t led_manager_task_handle = NULL;
+// static TaskHandle_t led_manager_task_handle = NULL;
 
 // Energy tracking NVS functions
 
@@ -294,7 +294,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
     int64_t now = esp_timer_get_time(); // microseconds
 
     // Debounce
-    if (now - last_isr_time < BUTTON_DEBOUNCE_MS * 1000)
+    if ((now - last_isr_time) < BUTTON_DEBOUNCE_MS)
     {
         return;
     }
@@ -311,7 +311,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
         button_led_feedback_active = true;
 
         // Check if this might be a double-click
-        if (waiting_for_double_click && (now - last_press_time) < (BUTTON_DOUBLE_CLICK_MAX_INTERVAL * 1000))
+        if (waiting_for_double_click && ((now - last_press_time) < BUTTON_DOUBLE_CLICK_MAX_INTERVAL))
         {
             // This is a double-click!
             if (first_click_was_ble) {
@@ -326,7 +326,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
         // Check if we're in factory reset confirmation mode
         if (factory_reset_confirmation_mode)
         {
-            if ((now - factory_reset_confirmation_start) < (FACTORY_RESET_CONFIRMATION_TIMEOUT * 1000))
+            if ((now - factory_reset_confirmation_start) < FACTORY_RESET_CONFIRMATION_TIMEOUT)
             {
                 // Second press within confirmation window - execute factory reset
                 buttonflag.factoryResetConfirmFlag = true;
@@ -342,7 +342,7 @@ static void IRAM_ATTR button_isr_handler(void *arg)
         }
 
         // Reset double-click detection if too much time has passed
-        if ((now - last_press_time) >= (BUTTON_DOUBLE_CLICK_MAX_INTERVAL * 1000))
+        if ((now - last_press_time) >= BUTTON_DOUBLE_CLICK_MAX_INTERVAL)
         {
             waiting_for_double_click = false;
             first_click_was_ble = false;
@@ -369,21 +369,21 @@ static void IRAM_ATTR button_isr_handler(void *arg)
         }
 
         // Determine action based on press duration
-        if (press_duration >= BUTTON_BYPASS_MODE_MIN_DURATION * 1000000)
+        if (press_duration >= BUTTON_BYPASS_MODE_MIN_DURATION)
         {
             // 30+ seconds: Bypass mode (technician only)
             buttonflag.bypassModeFlag = true;
         }
-        else if (press_duration >= BUTTON_FACTORY_RESET_MIN_DURATION * 1000000 &&
-                 press_duration < BUTTON_FACTORY_RESET_MAX_DURATION * 1000000)
+        else if (press_duration >= BUTTON_FACTORY_RESET_MIN_DURATION &&
+                 press_duration < BUTTON_FACTORY_RESET_MAX_DURATION)
         {
             // 10-30 seconds: Factory reset confirmation mode
             buttonflag.factoryResetFlag = true;
             factory_reset_confirmation_mode = true;
             factory_reset_confirmation_start = now;
         }
-        else if (press_duration >= BUTTON_BLE_PAIRING_MIN_DURATION * 1000000 &&
-                 press_duration < BUTTON_BLE_PAIRING_MAX_DURATION * 1000000)
+        else if (press_duration >= BUTTON_BLE_PAIRING_MIN_DURATION &&
+                 press_duration < BUTTON_BLE_PAIRING_MAX_DURATION)
         {
             // 5-10 seconds: BLE pairing mode
             buttonflag.BLEPairFlag = true;
@@ -402,178 +402,6 @@ bool is_button_led_feedback_active(void)
     return button_led_feedback_active;
 }
 
-// LED Manager Functions
-void set_led_status_flag(const char* flag_name, bool value)
-{
-    if (led_flags_mutex == NULL) return;
-
-    if (xSemaphoreTake(led_flags_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Critical errors (highest priority)
-        if (strcmp(flag_name, "error_critical") == 0) led_flags.error_critical = value;
-        else if (strcmp(flag_name, "error_ir_sensor") == 0) led_flags.error_ir_sensor = value;
-        else if (strcmp(flag_name, "error_heating") == 0) led_flags.error_heating = value;
-
-        // Button feedback (high priority)
-        else if (strcmp(flag_name, "button_ble_feedback") == 0) led_flags.button_ble_feedback = value;
-        else if (strcmp(flag_name, "button_factory_reset_feedback") == 0) led_flags.button_factory_reset_feedback = value;
-        else if (strcmp(flag_name, "button_bypass_feedback") == 0) led_flags.button_bypass_feedback = value;
-        else if (strcmp(flag_name, "button_softap_feedback") == 0) led_flags.button_softap_feedback = value;
-
-        // System operations (medium priority)
-        else if (strcmp(flag_name, "pairing_mode_active") == 0) led_flags.pairing_mode_active = value;
-        else if (strcmp(flag_name, "firmware_update") == 0) led_flags.firmware_update = value;
-        else if (strcmp(flag_name, "factory_reset_confirmation") == 0) led_flags.factory_reset_confirmation = value;
-        else if (strcmp(flag_name, "bypass_mode_active") == 0) led_flags.bypass_mode_active = value;
-
-        // Normal operation (lowest priority)
-        else if (strcmp(flag_name, "normal_operation") == 0) led_flags.normal_operation = value;
-        else if (strcmp(flag_name, "wifi_connected") == 0) led_flags.wifi_connected = value;
-        else if (strcmp(flag_name, "wifi_warning") == 0) led_flags.wifi_warning = value;
-
-        xSemaphoreGive(led_flags_mutex);
-    }
-}
-
-led_status_flags_t* get_led_status_flags(void)
-{
-    return &led_flags;
-}
-
-static void led_manager_task(void *pvParameters)
-{
-    const TickType_t xDelay = pdMS_TO_TICKS(150); // 150ms update rate for responsive feedback
-
-    // Track current LED state to avoid redundant calls
-    static struct {
-        led_effect_t effect;
-        COLORS color;
-        EFFECT_SPEED speed;
-        bool initialized;
-    } current_led_state = {LED_EFFECT_NONE, NONE, NO_SPEED, false};
-
-    while (1) {
-        if (led_flags_mutex != NULL && xSemaphoreTake(led_flags_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-
-            led_effect_t desired_effect;
-            COLORS desired_color;
-            EFFECT_SPEED desired_speed;
-
-            // Priority-based LED control (highest priority first)
-
-            // 1. Critical errors (RED)
-            if (led_flags.error_critical || led_flags.error_ir_sensor || led_flags.error_heating) {
-                desired_effect = LED_EFFECT_BLINK;
-                desired_color = RED;
-                desired_speed = LED_SPEED_FAST;
-            }
-
-            // 2. Button feedback (various colors, high priority)
-            else if (led_flags.button_ble_feedback) {
-                desired_effect = LED_EFFECT_BREATHING;
-                desired_color = BLUE;
-                desired_speed = NO_SPEED;
-            }
-            else if (led_flags.button_softap_feedback) {
-                desired_effect = LED_EFFECT_BREATHING;
-                desired_color = BLUE_DARK;
-                desired_speed = NO_SPEED;
-            }
-            else if (led_flags.button_factory_reset_feedback) {
-                desired_effect = LED_EFFECT_BREATHING;
-                desired_color = PURPLE;
-                desired_speed = NO_SPEED;
-            }
-            else if (led_flags.button_bypass_feedback) {
-                desired_effect = LED_EFFECT_STEADY;
-                desired_color = YELLOW;
-                desired_speed = NO_SPEED;
-            }
-
-            // 3. System operations (medium priority)
-            else if (led_flags.factory_reset_confirmation) {
-                desired_effect = LED_EFFECT_BREATHING;
-                desired_color = PURPLE;
-                desired_speed = LED_SPEED_SLOW;
-            }
-            else if (led_flags.firmware_update) {
-                desired_effect = LED_EFFECT_BREATHING;
-                desired_color = PURPLE;
-                desired_speed = LED_SPEED_MEDIUM;
-            }
-            else if (led_flags.pairing_mode_active) {
-                desired_effect = LED_EFFECT_BREATHING;
-                desired_color = BLUE;
-                desired_speed = LED_SPEED_SLOW;
-            }
-            else if (led_flags.bypass_mode_active) {
-                desired_effect = LED_EFFECT_STEADY;
-                desired_color = YELLOW;
-                desired_speed = NO_SPEED;
-            }
-
-            // 4. Warnings (medium-low priority)
-            else if (led_flags.wifi_warning) {
-                desired_effect = LED_EFFECT_BLINK;
-                desired_color = YELLOW;
-                desired_speed = LED_SPEED_SLOW;
-            }
-
-            // 5. Normal operation (lowest priority - only if no other states)
-            else if (led_flags.normal_operation) {
-                desired_effect = LED_EFFECT_STEADY;
-                desired_color = GREEN;
-                desired_speed = NO_SPEED;
-            }
-
-            // 6. No status - LED off
-            else {
-                desired_effect = LED_EFFECT_NONE;
-                desired_color = NONE;
-                desired_speed = NO_SPEED;
-            }
-
-            // Only update LED when state actually changes
-            if (!current_led_state.initialized ||
-                desired_effect != current_led_state.effect ||
-                desired_color != current_led_state.color ||
-                desired_speed != current_led_state.speed) {
-
-                set_led_effect(desired_effect, desired_color, desired_speed);
-
-                // Update tracked state
-                current_led_state.effect = desired_effect;
-                current_led_state.color = desired_color;
-                current_led_state.speed = desired_speed;
-                current_led_state.initialized = true;
-            }
-
-            xSemaphoreGive(led_flags_mutex);
-        }
-
-        vTaskDelay(xDelay);
-    }
-}
-
-void led_manager_init(void)
-{
-    // Create mutex for thread-safe flag access
-    led_flags_mutex = xSemaphoreCreateMutex();
-    if (led_flags_mutex == NULL) {
-        ESP_LOGE(DEVICE_TAG, "Failed to create LED flags mutex");
-        return;
-    }
-
-    // Initialize with normal operation
-    set_led_status_flag("normal_operation", true);
-
-    // Create LED manager task
-    if (xTaskCreate(led_manager_task, "LED_Manager", 4096, NULL, 6, &led_manager_task_handle) != pdPASS) {
-        ESP_LOGE(DEVICE_TAG, "Failed to create LED manager task");
-        return;
-    }
-
-    ESP_LOGI(DEVICE_TAG, "LED Manager initialized successfully");
-}
 
 void execute_command(void)
 {
@@ -979,9 +807,9 @@ void button_task(void * pvParameters)
         if (button_currently_pressed && button_led_feedback_active)
         {
             int64_t current_press_duration = esp_timer_get_time() - press_start_time;
-            int64_t duration_seconds = current_press_duration / 1000000;
+            // int64_t duration_seconds = current_press_duration / 1000000;
 
-            if (duration_seconds >= BUTTON_BYPASS_MODE_MIN_DURATION && !long_press_led_shown)
+            if ((current_press_duration >= BUTTON_BYPASS_MODE_MIN_DURATION) && !long_press_led_shown)
             {
                 // 30+ seconds: Yellow breathing for bypass mode (technician only)
                 ESP_LOGI(GPIO_TAG, "Button: Bypass mode ready (30s+) - technician only");
@@ -989,7 +817,7 @@ void button_task(void * pvParameters)
                 set_led_status_flag("button_bypass_feedback", true);
                 long_press_led_shown = true;
             }
-            else if (duration_seconds >= BUTTON_FACTORY_RESET_MIN_DURATION && duration_seconds < BUTTON_BYPASS_MODE_MIN_DURATION && !long_press_led_shown)
+            else if ((current_press_duration >= BUTTON_FACTORY_RESET_MIN_DURATION) && (current_press_duration < BUTTON_BYPASS_MODE_MIN_DURATION) && !long_press_led_shown)
             {
                 // 10-30 seconds: Purple breathing for factory reset
                 ESP_LOGI(GPIO_TAG, "Button: Factory reset confirmation ready (10-30s)");
@@ -997,7 +825,7 @@ void button_task(void * pvParameters)
                 set_led_status_flag("button_factory_reset_feedback", true);
                 long_press_led_shown = true;
             }
-            else if (duration_seconds >= BUTTON_BLE_PAIRING_MIN_DURATION && duration_seconds < BUTTON_FACTORY_RESET_MIN_DURATION && !long_press_led_shown)
+            else if ((current_press_duration >= BUTTON_BLE_PAIRING_MIN_DURATION) && (current_press_duration < BUTTON_FACTORY_RESET_MIN_DURATION) && !long_press_led_shown)
             {
                 // 5-10 seconds: Blue breathing for BLE pairing
                 ESP_LOGI(GPIO_TAG, "Button: BLE pairing ready (5-10s) - setting blue breathing LED");
@@ -1102,7 +930,7 @@ void button_task(void * pvParameters)
         if (factory_reset_confirmation_mode)
         {
             int64_t elapsed = esp_timer_get_time() - factory_reset_confirmation_start;
-            if (elapsed >= FACTORY_RESET_CONFIRMATION_TIMEOUT * 1000)
+            if (elapsed >= FACTORY_RESET_CONFIRMATION_TIMEOUT)
             {
                 ESP_LOGI(GPIO_TAG, "Factory reset confirmation timeout - cancelling");
                 factory_reset_confirmation_mode = false;
@@ -1205,75 +1033,63 @@ void button_init(void)
     ESP_LOGI(GPIO_TAG, "Button task created successfully");
 }
 
-extern "C" void app_main(void)
+const char* get_enum_name(ENUM_TYPE type, int value)
 {
-    // Configure log levels to reduce verbose output
-    esp_log_level_set("wifi", ESP_LOG_INFO);     // Hide debug WiFi logs like "mms: 0->0"
-    esp_log_level_set("HTTP_CLIENT", ESP_LOG_WARN); // Reduce HTTP client verbosity
-    esp_log_level_set("esp-tls", ESP_LOG_WARN);     // Reduce TLS verbosity
-    esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
-    
-    status_led_init();
-    led_manager_init();  // Initialize centralized LED management
-    device_data_init();
-    button_init();  // This now turns on sensor board power (GPIO10)
-    
-    // // Initialize sensors after power is applied to sensor board
-    ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
-    LD2410_init();
-    ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
-    ir_sensor_init();
-    heater_interface_init();
-    
-    // Initialize energy tracking system
-    ESP_LOGI(DEVICE_TAG, "Initializing energy tracking system...");
-    energy_data_load_from_nvs();
-    
-    // Create energy tracking timer
-    esp_timer_create_args_t energy_timer_args = {
-        .callback = energy_timer_callback,
-        .arg = NULL,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "energy_timer",
-        .skip_unhandled_events = false
-    };
-    
-    esp_err_t timer_err = esp_timer_create(&energy_timer_args, &energy_timer_handle);
-    if (timer_err == ESP_OK) {
-        esp_timer_start_periodic(energy_timer_handle, ENERGY_UPDATE_INTERVAL_MS * 1000); // Convert ms to μs
-        ESP_LOGI(DEVICE_TAG, "Energy tracking timer started successfully");
-    } else {
-        ESP_LOGE(DEVICE_TAG, "Failed to create energy tracking timer: %s", esp_err_to_name(timer_err));
-    }
-    
-    // set_heater_temp(27.5);
-    // set_heater_mode(AUTO_MODE);
-    
-    comm_init();
-   
-    
-    // Create WiFi monitoring task for BLE auto-streaming
-    if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
-    {
-        ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
-    }
-    else
-    {
-        ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
-    }
-    
-    if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
-    {
-        ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
-        wifi_init_sta(device_data.ssid, device_data.password);
-        vTaskDelay(pdMS_TO_TICKS(500)); 
-        thingsBoard_init();
-    }
-    else
-    {
-        ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
-        start_softap_provisioning();
-        ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
+    switch (type) {
+        case ENUM_DEVICE_STATUS:
+            switch ((DEVICE_STATUS)value) {
+                case OFF_STATE:         return "OFF_STATE";
+                case NORMAL_OP:         return "NORMAL_OP";
+                case PAIRING:           return "PAIRING";
+                case ERROR:             return "ERROR";
+                case FIRMWARE_UPDATE:   return "FIRMWARE_UPDATE";
+                default:                return "UNKNOWN_DEVICE_STATUS";
+            }
+
+        case ENUM_HEATER_STATE:
+            switch ((HEATER_STATE)value) {
+                case HEATER_OFF: return "HEATER_OFF";
+                case HEATER_LOW: return "HEATER_LOW";
+                case HEATER_MID: return "HEATER_MID";
+                case HEATER_HIGH: return "HEATER_HIGH";
+                default: return "UNKNOWN_HEATER_STATE";
+            }
+
+        case ENUM_DEVICE_MODE:
+            switch ((DEVICE_MODE)value) {
+                case MANUAL_MODE: return "MANUAL_MODE";
+                case AUTO_MODE:   return "AUTO_MODE";
+                case BYPASS_MODE: return "BYPASS_MODE";
+                case DEVICE_MODE_COUNT: return "DEVICE_MODE_COUNT";
+                default: return "UNKNOWN_DEVICE_MODE";
+            }
+
+        case ENUM_BLE_COMMANDS:
+            switch ((BLE_COMMANDS)value) {
+                case NO_COMMAND:               return "NO_COMMAND";
+                case POWER_CONTROL:            return "POWER_CONTROL";
+                case FACTORY_RESET:            return "FACTORY_RESET";
+                case READ_INTERNAL_TEMP:       return "READ_INTERNAL_TEMP";
+                case READ_IR_TEMPERATURES:     return "READ_IR_TEMPERATURES";
+                case SET_TARGET_TEMP:          return "SET_TARGET_TEMP";
+                case GET_TARGET_TEMP:          return "GET_TARGET_TEMP";
+                case SET_OPERATING_MODE:       return "SET_OPERATING_MODE";
+                case GET_OPERATING_MODE:       return "GET_OPERATING_MODE";
+                case READ_RELAY_STATE:         return "READ_RELAY_STATE";
+                case SET_RELAY_STATE:          return "SET_RELAY_STATE";
+                case CONTROL_SENSOR_BOARD:     return "CONTROL_SENSOR_BOARD";
+                case READ_PRESENCE_DATA:       return "READ_PRESENCE_DATA";
+                case READ_WIFI_STATUS:         return "READ_WIFI_STATUS";
+                case READ_SYSTEM_DIAGNOSTICS:  return "READ_SYSTEM_DIAGNOSTICS";
+                case READ_ENERGY_METRICS:      return "READ_ENERGY_METRICS";
+                case CONTROL_FRONT_LED:        return "CONTROL_FRONT_LED";
+                case READ_DEVICE_INFO:         return "READ_DEVICE_INFO";
+                case MAX_BLE_CMDS:             return "MAX_BLE_CMDS";
+                default: return "UNKNOWN_BLE_COMMAND";
+            }
+
+        default:
+            return "UNKNOWN_ENUM_TYPE";
     }
 }
 
@@ -1354,62 +1170,73 @@ static void wifi_monitoring_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-const char* get_enum_name(ENUM_TYPE type, int value)
+extern "C" void app_main(void)
 {
-    switch (type) {
-        case ENUM_DEVICE_STATUS:
-            switch ((DEVICE_STATUS)value) {
-                case OFF_STATE:         return "OFF_STATE";
-                case NORMAL_OP:         return "NORMAL_OP";
-                case PAIRING:           return "PAIRING";
-                case ERROR:             return "ERROR";
-                case FIRMWARE_UPDATE:   return "FIRMWARE_UPDATE";
-                default:                return "UNKNOWN_DEVICE_STATUS";
-            }
-
-        case ENUM_HEATER_STATE:
-            switch ((HEATER_STATE)value) {
-                case HEATER_OFF: return "HEATER_OFF";
-                case HEATER_LOW: return "HEATER_LOW";
-                case HEATER_MID: return "HEATER_MID";
-                case HEATER_HIGH: return "HEATER_HIGH";
-                default: return "UNKNOWN_HEATER_STATE";
-            }
-
-        case ENUM_DEVICE_MODE:
-            switch ((DEVICE_MODE)value) {
-                case MANUAL_MODE: return "MANUAL_MODE";
-                case AUTO_MODE:   return "AUTO_MODE";
-                case BYPASS_MODE: return "BYPASS_MODE";
-                case DEVICE_MODE_COUNT: return "DEVICE_MODE_COUNT";
-                default: return "UNKNOWN_DEVICE_MODE";
-            }
-
-        case ENUM_BLE_COMMANDS:
-            switch ((BLE_COMMANDS)value) {
-                case NO_COMMAND:               return "NO_COMMAND";
-                case POWER_CONTROL:            return "POWER_CONTROL";
-                case FACTORY_RESET:            return "FACTORY_RESET";
-                case READ_INTERNAL_TEMP:       return "READ_INTERNAL_TEMP";
-                case READ_IR_TEMPERATURES:     return "READ_IR_TEMPERATURES";
-                case SET_TARGET_TEMP:          return "SET_TARGET_TEMP";
-                case GET_TARGET_TEMP:          return "GET_TARGET_TEMP";
-                case SET_OPERATING_MODE:       return "SET_OPERATING_MODE";
-                case GET_OPERATING_MODE:       return "GET_OPERATING_MODE";
-                case READ_RELAY_STATE:         return "READ_RELAY_STATE";
-                case SET_RELAY_STATE:          return "SET_RELAY_STATE";
-                case CONTROL_SENSOR_BOARD:     return "CONTROL_SENSOR_BOARD";
-                case READ_PRESENCE_DATA:       return "READ_PRESENCE_DATA";
-                case READ_WIFI_STATUS:         return "READ_WIFI_STATUS";
-                case READ_SYSTEM_DIAGNOSTICS:  return "READ_SYSTEM_DIAGNOSTICS";
-                case READ_ENERGY_METRICS:      return "READ_ENERGY_METRICS";
-                case CONTROL_FRONT_LED:        return "CONTROL_FRONT_LED";
-                case READ_DEVICE_INFO:         return "READ_DEVICE_INFO";
-                case MAX_BLE_CMDS:             return "MAX_BLE_CMDS";
-                default: return "UNKNOWN_BLE_COMMAND";
-            }
-
-        default:
-            return "UNKNOWN_ENUM_TYPE";
-    }
+    // Configure log levels to reduce verbose output
+    esp_log_level_set("wifi", ESP_LOG_INFO);        // Hide debug WiFi logs like "mms: 0->0"
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_WARN); // Reduce HTTP client verbosity
+    esp_log_level_set("esp-tls", ESP_LOG_WARN);     // Reduce TLS verbosity
+    esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
+    
+    status_led_init();
+    device_data_init();
+    // button_init();  // This now turns on sensor board power (GPIO10)
+    
+    // // // Initialize sensors after power is applied to sensor board
+    // ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
+    // LD2410_init();
+    // ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
+    // ir_sensor_init();
+    // heater_interface_init();
+    
+    // // Initialize energy tracking system
+    // ESP_LOGI(DEVICE_TAG, "Initializing energy tracking system...");
+    // energy_data_load_from_nvs();
+    
+    // // Create energy tracking timer
+    // esp_timer_create_args_t energy_timer_args = {
+    //     .callback = energy_timer_callback,
+    //     .arg = NULL,
+    //     .dispatch_method = ESP_TIMER_TASK,
+    //     .name = "energy_timer",
+    //     .skip_unhandled_events = false
+    // };
+    
+    // esp_err_t timer_err = esp_timer_create(&energy_timer_args, &energy_timer_handle);
+    // if (timer_err == ESP_OK) {
+    //     esp_timer_start_periodic(energy_timer_handle, ENERGY_UPDATE_INTERVAL);
+    //     ESP_LOGI(DEVICE_TAG, "Energy tracking timer started successfully");
+    // } else {
+    //     ESP_LOGE(DEVICE_TAG, "Failed to create energy tracking timer: %s", esp_err_to_name(timer_err));
+    // }
+    
+    // // set_heater_temp(27.5);
+    // // set_heater_mode(AUTO_MODE);
+    
+    // comm_init();
+   
+    
+    // // Create WiFi monitoring task for BLE auto-streaming
+    // if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
+    // {
+    //     ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
+    // }
+    
+    // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
+    // {
+    //     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+    //     wifi_init_sta(device_data.ssid, device_data.password);
+    //     vTaskDelay(pdMS_TO_TICKS(500)); 
+    //     thingsBoard_init();
+    // }
+    // else
+    // {
+    //     ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
+    //     start_softap_provisioning();
+    //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
+    // }
 }
