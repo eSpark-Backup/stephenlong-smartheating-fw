@@ -1,13 +1,19 @@
-#include "app.h"
+#include "Storage_interface.h"
 #include "Comm_Interface.h"
 #include <nvs_flash.h>
 #include <esp_log.h>
 #include "esp_timer.h"
 #include "driver/gpio.h"
 
-#define TAG     DEVICE_TAG
+#define TAG     DEVICE_TAG STORAGE_TAG
 
 device_data_t device_data = {0};
+energy_tracking_t energy_data = {
+    .energy_consumed_kwh = 0.0f,
+    .heating_time_seconds = 0,
+    .last_update_time = 0,
+    .is_initialized = false
+};
 
 esp_err_t device_data_init(void)
 {
@@ -29,13 +35,16 @@ esp_err_t device_data_init(void)
             nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
             ESP_LOGW(TAG, "Device mode not set. Setting to %s.", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
             ESP_LOGW(TAG, "Target temp not set. Setting to 0.");
-            ESP_LOGW(TAG, "Presence detection duration val not set 0.");
+            ESP_LOGW(TAG, "Presence detection duration not set. Setting to 0.");
             nvs_commit(nvs);
+            nvs_close(nvs);
         }
         // return err;
     }
     else
     {
+        err = nvs_open(NVS_NAMESPACE_DEVICEDATA, NVS_READWRITE, &nvs);
+
         err = nvs_get_i8(nvs, NVS_KEY_MODE, (int8_t*)&device_data.mode);
         if (err != ESP_OK)
         {
@@ -53,21 +62,21 @@ esp_err_t device_data_init(void)
             nvs_set_blob(nvs, NVS_KEY_TARGET_TEMP, &device_data.target_temp, sizeof(device_data.target_temp));
             nvs_commit(nvs);
         }
-        err = nvs_get_u8(nvs, NVS_KEY_DETECTION_DURATION, &device_data.duration_val);
+            err = nvs_get_u8(nvs, NVS_KEY_DETECTION_DURATION, &device_data.duration_val);
+        ESP_LOGW(TAG, "Presence detection duration val: %x %d", device_data.duration_val,err);
         if (err != ESP_OK)
         {
-            device_data.duration_val = 0;
+            device_data.duration_val = 100;
             ESP_LOGE(TAG, "Presence detection duration not set. Setting to 0.");
             nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
             nvs_commit(nvs);
         }
+        nvs_close(nvs);
     }
 
     ESP_LOGW(TAG, "Device mode: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
     ESP_LOGW(TAG, "Target temp: %0.2f", device_data.target_temp);
     ESP_LOGW(TAG, "Presence detection duration val: %x", device_data.duration_val);
-
-    nvs_close(nvs);
 
     err = load_wifi_credentials(device_data.ssid, device_data.password);
     if(err == ESP_OK)
@@ -110,11 +119,6 @@ esp_err_t device_data_set(uint8_t op)
     {
         err |= nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
     }
-    // else if(op == 2)
-    // {
-    //     err |= nvs_set_str(nvs, NVS_KEY_SSID, device_data.ssid);
-    //     err |= nvs_set_str(nvs, NVS_KEY_PASSWORD, device_data.password);
-    // }
 
     nvs_commit(nvs);
     nvs_close(nvs);
@@ -124,7 +128,6 @@ esp_err_t device_data_set(uint8_t op)
 
 esp_err_t reset_device_and_erase_nvs()
 {
-    // set_led_effect(LED_EFFECT_BLINK, PURPLE, LED_SPEED_FAST);
     set_led_status_flag("erase_nvs", true);
     esp_err_t err;
 
@@ -136,6 +139,7 @@ esp_err_t reset_device_and_erase_nvs()
     }
 
     ESP_LOGI(TAG "_RESET", "NVS erased, restarting device...");
+    vTaskDelay(pdMS_TO_TICKS(10000)); // Allow time for LED to indicate erase
     return err;
 }
 
@@ -178,23 +182,29 @@ DEVICE_MODE get_device_mode(void)
     return device_data.mode;
 }
 
-esp_err_t get_device_credentials(char *token)
+esp_err_t get_device_thingsboard_credentials(char *token)
 {
     nvs_handle_t nvs;
     esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READONLY, &nvs);
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG HTTPS_TAG, "No saved credentials found");
+#ifdef DEVICE_TEST
+        char test_token[CREDENTIAL_VALUE] = "test_token_1234567890";
+        save_device_thingsboard_credentials(test_token);
+#endif
         return err;
     }
 
     size_t length = CREDENTIAL_VALUE;
-    nvs_get_str(nvs, "token", token, &length);
+    nvs_get_str(nvs, NVS_KEY_THINGSBOARD_TOKEN, token, &length);
     nvs_close(nvs);
+
+    ESP_LOGW(TAG, "HTTPS Provisioning Token loaded: %s", token);
     return ESP_OK;
 }
 
-esp_err_t save_device_credentials(const char *token)
+esp_err_t save_device_thingsboard_credentials(const char *token)
 {
     nvs_handle_t nvs;
     esp_err_t err = nvs_open(NVS_NAMESPACE_DEVICE_HTTPS_DATA, NVS_READWRITE, &nvs);
@@ -204,11 +214,132 @@ esp_err_t save_device_credentials(const char *token)
         return err;
     }
 
-    nvs_set_str(nvs, "token", token);
+    nvs_set_str(nvs, NVS_KEY_THINGSBOARD_TOKEN, token);
     nvs_commit(nvs);
     nvs_close(nvs);
     ESP_LOGI(TAG HTTPS_TAG, "HTTPS Provisioning Token saved");
     return ESP_OK;
+}
+
+esp_err_t energy_data_init(void)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_ENERGYDATA, NVS_READONLY, &nvs);
+    if (err != ESP_OK) {
+        ESP_LOGI(DEVICE_TAG, "Energy NVS namespace not found, initializing with defaults");
+        energy_data.energy_consumed_kwh = 0.0f;
+        energy_data.heating_time_seconds = 0;
+        energy_data.last_update_time = esp_timer_get_time();
+        energy_data.is_initialized = true;
+        energy_data_set(255); // Store all defaults
+        return ESP_OK;
+    }
+
+    size_t required_size = sizeof(float);
+    err = nvs_get_blob(nvs, NVS_KEY_ENERGY_CONSUMED, &energy_data.energy_consumed_kwh, &required_size);
+    if (err != ESP_OK) {
+        energy_data.energy_consumed_kwh = 0.0f;
+    }
+
+    required_size = sizeof(uint32_t);
+    err = nvs_get_blob(nvs, NVS_KEY_HEATING_TIME, &energy_data.heating_time_seconds, &required_size);
+    if (err != ESP_OK) {
+        energy_data.heating_time_seconds = 0;
+    }
+
+    required_size = sizeof(int64_t);
+    err = nvs_get_blob(nvs, NVS_KEY_LAST_UPDATE_TIME, &energy_data.last_update_time, &required_size);
+    if (err != ESP_OK) {
+        energy_data.last_update_time = esp_timer_get_time();
+    }
+
+    energy_data.is_initialized = true;
+    nvs_close(nvs);
+
+    ESP_LOGI(DEVICE_TAG, "Energy data loaded: %.3f kWh, %lu seconds heating time",
+             energy_data.energy_consumed_kwh, energy_data.heating_time_seconds);
+    return ESP_OK;
+}
+
+/* Function for storing energy values in nvs
+ * @param op: operation to perform
+              0: store energy consumed
+              1: store heating time
+              2: store last update time
+              255: store all parameters
+ */
+esp_err_t energy_data_set(uint8_t op)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_ENERGYDATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        set_led_status_flag("error_nvs", true);
+        return err;
+    }
+    if(op == 0)
+    {
+        err = nvs_set_blob(nvs, NVS_KEY_ENERGY_CONSUMED, &energy_data.energy_consumed_kwh, sizeof(float));
+    }
+    else if(op == 1)
+    {
+        err |= nvs_set_blob(nvs, NVS_KEY_HEATING_TIME, &energy_data.heating_time_seconds, sizeof(uint32_t));
+    }
+    else if(op == 2)
+    {
+        err |= nvs_set_blob(nvs, NVS_KEY_LAST_UPDATE_TIME, &energy_data.last_update_time, sizeof(int64_t));
+    }
+    else if(op == 255)
+    {
+        err |= nvs_set_blob(nvs, NVS_KEY_ENERGY_CONSUMED, &energy_data.energy_consumed_kwh, sizeof(float));
+        err |= nvs_set_blob(nvs, NVS_KEY_HEATING_TIME, &energy_data.heating_time_seconds, sizeof(uint32_t));
+        err |= nvs_set_blob(nvs, NVS_KEY_LAST_UPDATE_TIME, &energy_data.last_update_time, sizeof(int64_t));
+    }
+
+    nvs_commit(nvs);
+    nvs_close(nvs);
+
+    return err;
+}
+
+void set_energy_consumed(float energy_consumed)
+{
+    energy_data.energy_consumed_kwh = energy_consumed;
+    ESP_LOGD(TAG, "Energy consumed set to: %.2f", energy_data.energy_consumed_kwh);
+
+    energy_data_set(0);
+}
+
+float get_energy_consumed(void)
+{
+    return energy_data.energy_consumed_kwh;
+}
+
+void set_heating_time(uint32_t heating_time)
+{
+    energy_data.heating_time_seconds = heating_time;
+    ESP_LOGD(TAG, "Heating time set to: %lu", energy_data.heating_time_seconds);
+
+    energy_data_set(1);
+}
+
+uint32_t get_heating_time(void)
+{
+    return energy_data.heating_time_seconds;
+}
+
+void set_update_time(int64_t update_time)
+{
+    energy_data.last_update_time = update_time;
+    ESP_LOGD(TAG, "Last update time set to: %lli", energy_data.last_update_time);
+
+    energy_data_set(2);
+}
+
+int64_t get_update_time(void)
+{
+    return energy_data.last_update_time;
 }
 
 // Shared telemetry interval management
@@ -243,40 +374,5 @@ void update_presence_detection_time(bool presence_detected)
 {
     if (presence_detected) {
         last_presence_detected_time = US_TO_MS(esp_timer_get_time());
-    }
-}
-
-void sensor_board_init(void)
-{
-    // Initialize GPIO for sensor board power
-    gpio_config_t io_conf = {
-        .pin_bit_mask = GPIO_PIN_MASK(GND_SW),
-        .mode = GPIO_MODE_INPUT_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&io_conf);
-
-    // Set initial state to ON
-    set_sensor_board_power(true);
-    ESP_LOGI(TAG GPIO_TAG, "Sensor board initialized.");
-}
-
-void set_sensor_board_power(bool enable)
-{
-    if (gpio_get_level(GND_SW) == enable)
-    {
-        ESP_LOGD(TAG GPIO_TAG, "Sensor board power already %s", enable ? "enabled" : "disabled");
-        return;
-    }
-
-    gpio_set_level(GND_SW, enable);
-    ESP_LOGD(TAG GPIO_TAG, "Sensor board power %s", gpio_get_level(GND_SW) ? "enabled" : "disabled");
-
-    if (enable)
-    {
-        // Allow time for sensor board to power up and stabilize
-        vTaskDelay(pdMS_TO_TICKS(100));  // 100ms delay for sensor stabilization
     }
 }

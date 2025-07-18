@@ -8,7 +8,7 @@
 #include "driver/gpio.h"
 
 #include "defines.h"
-#include "app.h"
+#include "Storage_interface.h"
 #include "MLX90614_interface.h"
 #include "Heater_interface.h"
 #include "status_led.h"
@@ -28,13 +28,13 @@ static uint8_t calculate_heating_efficiency(void);
 static void energy_timer_callback(void *arg);
 static void wifi_monitoring_task(void *pvParameters);
 
-// Energy tracking global variables
-static energy_tracking_t energy_data = {
-    .energy_consumed_kwh = 0.0f,
-    .heating_time_seconds = 0,
-    .last_update_time = 0,
-    .is_initialized = false
-};
+// // Energy tracking global variables
+// static energy_tracking_t energy_data = {
+//     .energy_consumed_kwh = 0.0f,
+//     .heating_time_seconds = 0,
+//     .last_update_time = 0,
+//     .is_initialized = false
+// };
 static esp_timer_handle_t energy_timer_handle;
 
 ButtonFlags buttonflag={
@@ -92,202 +92,128 @@ static bool button_led_feedback_active = false;
 // Energy tracking NVS functions
 
 
-static esp_err_t energy_data_load_from_nvs(void)
-{
-    nvs_handle_t nvs_handle;
-    esp_err_t err = nvs_open(NVS_NAMESPACE_ENERGYDATA, NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGI(DEVICE_TAG, "Energy NVS namespace not found, initializing with defaults");
-        energy_data.energy_consumed_kwh = 0.0f;
-        energy_data.heating_time_seconds = 0;
-        energy_data.last_update_time = esp_timer_get_time();
-        energy_data.is_initialized = true;
-        return ESP_OK;
-    }
 
-    size_t required_size = sizeof(float);
-    err = nvs_get_blob(nvs_handle, NVS_KEY_ENERGY_CONSUMED, &energy_data.energy_consumed_kwh, &required_size);
-    if (err != ESP_OK) {
-        energy_data.energy_consumed_kwh = 0.0f;
-    }
 
-    required_size = sizeof(uint32_t);
-    err = nvs_get_blob(nvs_handle, NVS_KEY_HEATING_TIME, &energy_data.heating_time_seconds, &required_size);
-    if (err != ESP_OK) {
-        energy_data.heating_time_seconds = 0;
-    }
+// // Function to reset energy data (useful for testing/debugging)
+// __attribute__((unused)) static esp_err_t energy_data_reset(void)
+// {
+//     energy_data.energy_consumed_kwh = 0.0f;
+//     energy_data.heating_time_seconds = 0;
+//     energy_data.last_update_time = esp_timer_get_time();
 
-    required_size = sizeof(int64_t);
-    err = nvs_get_blob(nvs_handle, NVS_KEY_LAST_UPDATE_TIME, &energy_data.last_update_time, &required_size);
-    if (err != ESP_OK) {
-        energy_data.last_update_time = esp_timer_get_time();
-    }
+//     ESP_LOGI(DEVICE_TAG, "Energy data reset");
+//     // return energy_data_save_to_nvs();
+//     return energy_data_set(255);
+// }
 
-    energy_data.is_initialized = true;
-    nvs_close(nvs_handle);
+// // Function to get current energy statistics (useful for debugging)
+// __attribute__((unused)) static void energy_data_print_stats(void)
+// {
+//     if (!energy_data.is_initialized) {
+//         ESP_LOGW(DEVICE_TAG, "Energy system not initialized");
+//         return;
+//     }
 
-    ESP_LOGI(DEVICE_TAG, "Energy data loaded: %.3f kWh, %lu seconds heating time",
-             energy_data.energy_consumed_kwh, energy_data.heating_time_seconds);
-    return ESP_OK;
-}
+//     float current_power = calculate_current_power_consumption();
+//     uint8_t efficiency = calculate_heating_efficiency();
+//     HEATER_STATE current_state = get_heater_state();
 
-static esp_err_t energy_data_save_to_nvs(void)
-{
-    nvs_handle_t nvs_handle;
-    esp_err_t err = nvs_open(NVS_NAMESPACE_ENERGYDATA, NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(DEVICE_TAG, "Failed to open energy NVS for writing: %s", esp_err_to_name(err));
-        return err;
-    }
+//     ESP_LOGI(DEVICE_TAG, "=== Energy Statistics ===");
+//     ESP_LOGI(DEVICE_TAG, "Current Power: %.1f W", current_power);
+//     ESP_LOGI(DEVICE_TAG, "Heater State: %s", get_enum_name(ENUM_HEATER_STATE, current_state));
+//     ESP_LOGI(DEVICE_TAG, "Total Energy: %.3f kWh", energy_data.energy_consumed_kwh);
+//     ESP_LOGI(DEVICE_TAG, "Heating Time: %lu seconds (%.1f hours)",
+//              energy_data.heating_time_seconds,
+//              (float)energy_data.heating_time_seconds / 3600.0f);
+//     ESP_LOGI(DEVICE_TAG, "Efficiency: %d%%", efficiency);
+//     ESP_LOGI(DEVICE_TAG, "========================");
+// }
 
-    err = nvs_set_blob(nvs_handle, NVS_KEY_ENERGY_CONSUMED, &energy_data.energy_consumed_kwh, sizeof(float));
-    if (err != ESP_OK) {
-        ESP_LOGE(DEVICE_TAG, "Failed to save energy consumed: %s", esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-    }
+// // Energy calculation functions
+// static float calculate_current_power_consumption(void)
+// {
+//     HEATER_STATE current_state = get_heater_state();
+//     float power = 0.0f;
 
-    err = nvs_set_blob(nvs_handle, NVS_KEY_HEATING_TIME, &energy_data.heating_time_seconds, sizeof(uint32_t));
-    if (err != ESP_OK) {
-        ESP_LOGE(DEVICE_TAG, "Failed to save heating time: %s", esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-    }
+//     switch (current_state) {
+//         case HEATER_OFF:
+//             power = 0.0f;
+//             break;
+//         case HEATER_LOW:
+//             power = HEATING_LOW_WATTS;
+//             break;
+//         case HEATER_MID:
+//             power = HEATING_HIGH_WATTS;
+//             break;
+//         case HEATER_HIGH:
+//             power = HEATING_LOW_WATTS + HEATING_HIGH_WATTS;
+//             break;
+//         default:
+//             power = 0.0f;
+//             break;
+//     }
 
-    err = nvs_set_blob(nvs_handle, NVS_KEY_LAST_UPDATE_TIME, &energy_data.last_update_time, sizeof(int64_t));
-    if (err != ESP_OK) {
-        ESP_LOGE(DEVICE_TAG, "Failed to save last update time: %s", esp_err_to_name(err));
-        nvs_close(nvs_handle);
-        return err;
-    }
+//     return power;
+// }
 
-    err = nvs_commit(nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(DEVICE_TAG, "Failed to commit energy NVS: %s", esp_err_to_name(err));
-    }
+// static uint8_t calculate_heating_efficiency(void)
+// {
+//     // Calculate efficiency based on heating duty cycle over the last period
+//     // This is a simplified efficiency calculation
+//     float target_temp = get_target_temp();
+//     float current_temp = get_operative_temp();
 
-    nvs_close(nvs_handle);
-    return err;
-}
+//     if (target_temp <= 0) {
+//         return 0; // No target set
+//     }
 
-// Function to reset energy data (useful for testing/debugging)
-__attribute__((unused)) static esp_err_t energy_data_reset(void)
-{
-    energy_data.energy_consumed_kwh = 0.0f;
-    energy_data.heating_time_seconds = 0;
-    energy_data.last_update_time = esp_timer_get_time();
+//     float temp_diff = target_temp - current_temp;
 
-    ESP_LOGI(DEVICE_TAG, "Energy data reset");
-    return energy_data_save_to_nvs();
-}
+//     // Simple efficiency calculation: closer to target = higher efficiency
+//     if (temp_diff <= 0.5f && temp_diff >= -0.5f) {
+//         return 95; // Very close to target
+//     } else if (temp_diff <= 1.0f && temp_diff >= -1.0f) {
+//         return 85; // Close to target
+//     } else if (temp_diff <= 2.0f && temp_diff >= -2.0f) {
+//         return 70; // Moderately close
+//     } else {
+//         return 50; // Far from target
+//     }
+// }
 
-// Function to get current energy statistics (useful for debugging)
-__attribute__((unused)) static void energy_data_print_stats(void)
-{
-    if (!energy_data.is_initialized) {
-        ESP_LOGW(DEVICE_TAG, "Energy system not initialized");
-        return;
-    }
+// static void energy_timer_callback(void *arg)
+// {
+//     if (!energy_data.is_initialized) {
+//         return;
+//     }
 
-    float current_power = calculate_current_power_consumption();
-    uint8_t efficiency = calculate_heating_efficiency();
-    HEATER_STATE current_state = get_heater_state();
+//     int64_t current_time = esp_timer_get_time();
+//     int64_t time_diff_us = current_time - energy_data.last_update_time;
+//     float time_diff_hours = (float)time_diff_us / (1000000.0f * 3600.0f); // Convert to hours
 
-    ESP_LOGI(DEVICE_TAG, "=== Energy Statistics ===");
-    ESP_LOGI(DEVICE_TAG, "Current Power: %.1f W", current_power);
-    ESP_LOGI(DEVICE_TAG, "Heater State: %s", get_enum_name(ENUM_HEATER_STATE, current_state));
-    ESP_LOGI(DEVICE_TAG, "Total Energy: %.3f kWh", energy_data.energy_consumed_kwh);
-    ESP_LOGI(DEVICE_TAG, "Heating Time: %lu seconds (%.1f hours)",
-             energy_data.heating_time_seconds,
-             (float)energy_data.heating_time_seconds / 3600.0f);
-    ESP_LOGI(DEVICE_TAG, "Efficiency: %d%%", efficiency);
-    ESP_LOGI(DEVICE_TAG, "========================");
-}
+//     float current_power = calculate_current_power_consumption();
 
-// Energy calculation functions
-static float calculate_current_power_consumption(void)
-{
-    HEATER_STATE current_state = get_heater_state();
-    float power = 0.0f;
+//     // Update energy consumption (integrate power over time)
+//     energy_data.energy_consumed_kwh += (current_power * time_diff_hours) / 1000.0f; // Convert watts to kW
 
-    switch (current_state) {
-        case HEATER_OFF:
-            power = 0.0f;
-            break;
-        case HEATER_LOW:
-            power = HEATING_LOW_WATTS;
-            break;
-        case HEATER_MID:
-            power = HEATING_HIGH_WATTS;
-            break;
-        case HEATER_HIGH:
-            power = HEATING_LOW_WATTS + HEATING_HIGH_WATTS;
-            break;
-        default:
-            power = 0.0f;
-            break;
-    }
+//     // Update heating time if any heating is active
+//     if (current_power > 0) {
+//         energy_data.heating_time_seconds += (uint32_t)(time_diff_us / 1000000); // Convert to seconds
+//     }
 
-    return power;
-}
+//     energy_data.last_update_time = current_time;
 
-static uint8_t calculate_heating_efficiency(void)
-{
-    // Calculate efficiency based on heating duty cycle over the last period
-    // This is a simplified efficiency calculation
-    float target_temp = get_target_temp();
-    float current_temp = get_operative_temp();
-
-    if (target_temp <= 0) {
-        return 0; // No target set
-    }
-
-    float temp_diff = target_temp - current_temp;
-
-    // Simple efficiency calculation: closer to target = higher efficiency
-    if (temp_diff <= 0.5f && temp_diff >= -0.5f) {
-        return 95; // Very close to target
-    } else if (temp_diff <= 1.0f && temp_diff >= -1.0f) {
-        return 85; // Close to target
-    } else if (temp_diff <= 2.0f && temp_diff >= -2.0f) {
-        return 70; // Moderately close
-    } else {
-        return 50; // Far from target
-    }
-}
-
-static void energy_timer_callback(void *arg)
-{
-    if (!energy_data.is_initialized) {
-        return;
-    }
-
-    int64_t current_time = esp_timer_get_time();
-    int64_t time_diff_us = current_time - energy_data.last_update_time;
-    float time_diff_hours = (float)time_diff_us / (1000000.0f * 3600.0f); // Convert to hours
-
-    float current_power = calculate_current_power_consumption();
-
-    // Update energy consumption (integrate power over time)
-    energy_data.energy_consumed_kwh += (current_power * time_diff_hours) / 1000.0f; // Convert watts to kW
-
-    // Update heating time if any heating is active
-    if (current_power > 0) {
-        energy_data.heating_time_seconds += (uint32_t)(time_diff_us / 1000000); // Convert to seconds
-    }
-
-    energy_data.last_update_time = current_time;
-
-    // Save to NVS every 60 seconds to avoid excessive flash writes
-    static int save_counter = 0;
-    save_counter++;
-    if (save_counter >= 60) {
-        energy_data_save_to_nvs();
-        save_counter = 0;
-        ESP_LOGD(DEVICE_TAG, "Energy data saved: %.3f kWh, %lu seconds, %.1f W",
-                 energy_data.energy_consumed_kwh, energy_data.heating_time_seconds, current_power);
-    }
-}
+//     // Save to NVS every 60 seconds to avoid excessive flash writes
+//     static int save_counter = 0;
+//     save_counter++;
+//     if (save_counter >= 60) {
+//         // energy_data_save_to_nvs();
+//         energy_data_set(255);
+//         save_counter = 0;
+//         ESP_LOGD(DEVICE_TAG, "Energy data saved: %.3f kWh, %lu seconds, %.1f W",
+//                  energy_data.energy_consumed_kwh, energy_data.heating_time_seconds, current_power);
+//     }
+// }
 
 static void IRAM_ATTR button_isr_handler(void *arg)
 {
@@ -674,8 +600,8 @@ void execute_command(void)
             uint8_t efficiency_percent;
         } ble_energy_data = {
             .power_consumption_w = calculate_current_power_consumption(),
-            .energy_consumed_kwh = energy_data.energy_consumed_kwh,
-            .heating_time_seconds = energy_data.heating_time_seconds,
+            .energy_consumed_kwh = get_energy_consumed(),
+            .heating_time_seconds = get_heating_time(),
             .efficiency_percent = calculate_heating_efficiency()
         };
 
@@ -974,23 +900,6 @@ void button_task(void * pvParameters)
 
 void button_init(void)
 {
-    // // Configure GND_SW (GPIO10) as output for sensor board power control
-    // gpio_config_t gnd_sw_cfg = {
-    //     .pin_bit_mask = GPIO_PIN_MASK(GND_SW),
-    //     .mode = GPIO_MODE_OUTPUT,
-    //     .pull_up_en = GPIO_PULLUP_DISABLE,
-    //     .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    //     .intr_type = GPIO_INTR_DISABLE
-    // };
-    // gpio_config(&gnd_sw_cfg);
-
-    // // Turn on sensor board power (MOSFET control)
-    // gpio_set_level(GND_SW , true);
-    // ESP_LOGI(GPIO_TAG, "Sensor board power enabled (GPIO10=HIGH)");
-
-    // // Allow time for sensor board to power up and stabilize
-    // vTaskDelay(pdMS_TO_TICKS(100));  // 100ms delay for sensor stabilization
-
     // Configure button GPIO - match ESPHome config (pulldown enabled)
     gpio_config_t btn_cfg = {
         .pin_bit_mask = GPIO_PIN_MASK(BUTTON_GPIO),
@@ -1034,63 +943,38 @@ void button_init(void)
     ESP_LOGI(TAG GPIO_TAG, "Button task created successfully");
 }
 
-const char* get_enum_name(ENUM_TYPE type, int value)
+void sensor_board_init(void)
 {
-    switch (type) {
-        case ENUM_DEVICE_STATUS:
-            switch ((DEVICE_STATUS)value) {
-                case OFF_STATE:         return "OFF_STATE";
-                case NORMAL_OP:         return "NORMAL_OP";
-                case PAIRING:           return "PAIRING";
-                case ERROR:             return "ERROR";
-                case FIRMWARE_UPDATE:   return "FIRMWARE_UPDATE";
-                default:                return "UNKNOWN_DEVICE_STATUS";
-            }
+    // Initialize GPIO for sensor board power
+    gpio_config_t io_conf = {
+        .pin_bit_mask = GPIO_PIN_MASK(GND_SW),
+        .mode = GPIO_MODE_INPUT_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
 
-        case ENUM_HEATER_STATE:
-            switch ((HEATER_STATE)value) {
-                case HEATER_OFF: return "HEATER_OFF";
-                case HEATER_LOW: return "HEATER_LOW";
-                case HEATER_MID: return "HEATER_MID";
-                case HEATER_HIGH: return "HEATER_HIGH";
-                default: return "UNKNOWN_HEATER_STATE";
-            }
+    // Set initial state to ON
+    set_sensor_board_power(true);
+    ESP_LOGI(TAG GPIO_TAG, "Sensor board initialized.");
+}
 
-        case ENUM_DEVICE_MODE:
-            switch ((DEVICE_MODE)value) {
-                case MANUAL_MODE: return "MANUAL_MODE";
-                case AUTO_MODE:   return "AUTO_MODE";
-                case BYPASS_MODE: return "BYPASS_MODE";
-                case DEVICE_MODE_COUNT: return "DEVICE_MODE_COUNT";
-                default: return "UNKNOWN_DEVICE_MODE";
-            }
+void set_sensor_board_power(bool enable)
+{
+    if (gpio_get_level(GND_SW) == enable)
+    {
+        ESP_LOGD(TAG GPIO_TAG, "Sensor board power already %s", enable ? "enabled" : "disabled");
+        return;
+    }
 
-        case ENUM_BLE_COMMANDS:
-            switch ((BLE_COMMANDS)value) {
-                case NO_COMMAND:               return "NO_COMMAND";
-                case POWER_CONTROL:            return "POWER_CONTROL";
-                case FACTORY_RESET:            return "FACTORY_RESET";
-                case READ_INTERNAL_TEMP:       return "READ_INTERNAL_TEMP";
-                case READ_IR_TEMPERATURES:     return "READ_IR_TEMPERATURES";
-                case SET_TARGET_TEMP:          return "SET_TARGET_TEMP";
-                case GET_TARGET_TEMP:          return "GET_TARGET_TEMP";
-                case SET_OPERATING_MODE:       return "SET_OPERATING_MODE";
-                case GET_OPERATING_MODE:       return "GET_OPERATING_MODE";
-                case READ_RELAY_STATE:         return "READ_RELAY_STATE";
-                case SET_RELAY_STATE:          return "SET_RELAY_STATE";
-                case CONTROL_SENSOR_BOARD:     return "CONTROL_SENSOR_BOARD";
-                case READ_PRESENCE_DATA:       return "READ_PRESENCE_DATA";
-                case READ_WIFI_STATUS:         return "READ_WIFI_STATUS";
-                case READ_SYSTEM_DIAGNOSTICS:  return "READ_SYSTEM_DIAGNOSTICS";
-                case READ_ENERGY_METRICS:      return "READ_ENERGY_METRICS";
-                case CONTROL_FRONT_LED:        return "CONTROL_FRONT_LED";
-                case READ_DEVICE_INFO:         return "READ_DEVICE_INFO";
-                case MAX_BLE_CMDS:             return "MAX_BLE_CMDS";
-                default: return "UNKNOWN_BLE_COMMAND";
-            }
+    gpio_set_level(GND_SW, enable);
+    ESP_LOGD(TAG GPIO_TAG, "Sensor board power %s", gpio_get_level(GND_SW) ? "enabled" : "disabled");
 
-        default:
-            return "UNKNOWN_ENUM_TYPE";
+    if (enable)
+    {
+        // Allow time for sensor board to power up and stabilize
+        vTaskDelay(pdMS_TO_TICKS(500));  // 500ms delay for sensor stabilization
     }
 }
 
@@ -1179,15 +1063,17 @@ extern "C" void app_main(void)
     esp_log_level_set("esp-tls", ESP_LOG_WARN);     // Reduce TLS verbosity
     esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
 
+
     status_led_init();
     device_data_init();
+    energy_data_init();
     button_init();
 
     // Initialize sensors after power is applied to sensor board
     sensor_board_init();
-    // LD2410_init();
+    LD2410_init();
     ir_sensor_init();
-    // heater_interface_init();
+    heater_interface_init();
     
     // // Initialize energy tracking system
     // ESP_LOGI(DEVICE_TAG, "Initializing energy tracking system...");
@@ -1239,4 +1125,64 @@ extern "C" void app_main(void)
     //     start_softap_provisioning();
     //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
     // }
+}
+
+const char* get_enum_name(ENUM_TYPE type, int value)
+{
+    switch (type) {
+        case ENUM_DEVICE_STATUS:
+            switch ((DEVICE_STATUS)value) {
+                case OFF_STATE:         return "OFF_STATE";
+                case NORMAL_OP:         return "NORMAL_OP";
+                case PAIRING:           return "PAIRING";
+                case ERROR:             return "ERROR";
+                case FIRMWARE_UPDATE:   return "FIRMWARE_UPDATE";
+                default:                return "UNKNOWN_DEVICE_STATUS";
+            }
+
+        case ENUM_HEATER_STATE:
+            switch ((HEATER_STATE)value) {
+                case HEATER_OFF: return "HEATER_OFF";
+                case HEATER_LOW: return "HEATER_LOW";
+                case HEATER_MID: return "HEATER_MID";
+                case HEATER_HIGH: return "HEATER_HIGH";
+                default: return "UNKNOWN_HEATER_STATE";
+            }
+
+        case ENUM_DEVICE_MODE:
+            switch ((DEVICE_MODE)value) {
+                case MANUAL_MODE: return "MANUAL_MODE";
+                case AUTO_MODE:   return "AUTO_MODE";
+                case BYPASS_MODE: return "BYPASS_MODE";
+                case DEVICE_MODE_COUNT: return "DEVICE_MODE_COUNT";
+                default: return "UNKNOWN_DEVICE_MODE";
+            }
+
+        case ENUM_BLE_COMMANDS:
+            switch ((BLE_COMMANDS)value) {
+                case NO_COMMAND:               return "NO_COMMAND";
+                case POWER_CONTROL:            return "POWER_CONTROL";
+                case FACTORY_RESET:            return "FACTORY_RESET";
+                case READ_INTERNAL_TEMP:       return "READ_INTERNAL_TEMP";
+                case READ_IR_TEMPERATURES:     return "READ_IR_TEMPERATURES";
+                case SET_TARGET_TEMP:          return "SET_TARGET_TEMP";
+                case GET_TARGET_TEMP:          return "GET_TARGET_TEMP";
+                case SET_OPERATING_MODE:       return "SET_OPERATING_MODE";
+                case GET_OPERATING_MODE:       return "GET_OPERATING_MODE";
+                case READ_RELAY_STATE:         return "READ_RELAY_STATE";
+                case SET_RELAY_STATE:          return "SET_RELAY_STATE";
+                case CONTROL_SENSOR_BOARD:     return "CONTROL_SENSOR_BOARD";
+                case READ_PRESENCE_DATA:       return "READ_PRESENCE_DATA";
+                case READ_WIFI_STATUS:         return "READ_WIFI_STATUS";
+                case READ_SYSTEM_DIAGNOSTICS:  return "READ_SYSTEM_DIAGNOSTICS";
+                case READ_ENERGY_METRICS:      return "READ_ENERGY_METRICS";
+                case CONTROL_FRONT_LED:        return "CONTROL_FRONT_LED";
+                case READ_DEVICE_INFO:         return "READ_DEVICE_INFO";
+                case MAX_BLE_CMDS:             return "MAX_BLE_CMDS";
+                default: return "UNKNOWN_BLE_COMMAND";
+            }
+
+        default:
+            return "UNKNOWN_ENUM_TYPE";
+    }
 }

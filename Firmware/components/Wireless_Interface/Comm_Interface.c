@@ -626,6 +626,9 @@ esp_err_t load_wifi_credentials(char *ssid, char *password)
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG WIFI_TAG, "No saved credentials found");
+#ifdef DEVICE_TEST
+        save_wifi_credentials(TEST_AP_SSID, TEST_AP_PASS);
+#endif
         return err;
     }
 

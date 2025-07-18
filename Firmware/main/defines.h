@@ -98,7 +98,13 @@ extern "C" {
 #define WIFI_PASS_MAX_LEN           64
 #define CREDENTIAL_VALUE            128
 
+#ifdef DEVICE_TEST
+#define TEST_AP_SSID                "eSpark Wifi"
+#define TEST_AP_PASS                "47356880"
+#endif
+
 #define DEVICE_TAG                  "APP"
+#define STORAGE_TAG                 "_Storage"
 #define GPIO_TAG                    "_GPIO"
 #define WIFI_TAG                    "_SoftAP"
 #define GATTS_TAG                   "_BLE"
@@ -133,18 +139,21 @@ extern "C" {
 #define CONFIG_SET_RAW_ADV_DATA     0
 #define BLE_PAIR_ENCRYPTION_KEY     16
 
+
+// These should not be longer than 16 characters?
 #define NVS_NAMESPACE_DEVICEDATA        "device_data"
-#define NVS_NAMESPACE_WIFIDATA          "wifi_storage"
-#define NVS_NAMESPACE_DEVICE_HTTPS_DATA "https_dev_data"
-#define NVS_KEY_SSID                    "ssid"
-#define NVS_KEY_PASSWORD                "password"
 #define NVS_KEY_MODE                    "mode"
 #define NVS_KEY_TARGET_TEMP             "target_temp"
-#define NVS_KEY_DETECTION_DURATION      "detection_duration"
+#define NVS_KEY_DETECTION_DURATION      "detection_dur"
+#define NVS_NAMESPACE_WIFIDATA          "wifi_storage"
+#define NVS_KEY_SSID                    "ssid"
+#define NVS_KEY_PASSWORD                "password"
+#define NVS_NAMESPACE_DEVICE_HTTPS_DATA "https_dev_data"
+#define NVS_KEY_THINGSBOARD_TOKEN       "token"
+#define NVS_KEY_LAST_UPDATE_TIME        "last_update"
 #define NVS_NAMESPACE_ENERGYDATA        "energy_data"
 #define NVS_KEY_ENERGY_CONSUMED         "energy_kwh"
 #define NVS_KEY_HEATING_TIME            "heating_time"
-#define NVS_KEY_LAST_UPDATE_TIME        "last_update"
 
 // Energy measurement constants - HC-1200-VP Configuration
 #define HEATING_LOW_WATTS              500.0f         // Watts for edge element (lower power)
@@ -266,7 +275,8 @@ bool is_button_led_feedback_active(void);
 void set_led_status_flag(const char* flag_name, bool value);
 // led_status_flags_t* get_led_status_flags(void);
 
-
+void sensor_board_init(void);
+void set_sensor_board_power(bool enable);
 
 #ifdef __cplusplus
 }

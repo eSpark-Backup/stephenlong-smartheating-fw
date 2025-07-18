@@ -1,4 +1,4 @@
-#include "app.h"
+#include "Storage_interface.h"
 #include "Heater_interface.h"
 #include "MLX90614_interface.h"
 #include "freertos/FreeRTOS.h"
@@ -57,8 +57,10 @@ void set_heater_mode(DEVICE_MODE mode)
             if(xTaskCreate(heater_interaface_task, "Heater_Interface_Task", 2048, NULL, 5, &xHeaterTaskHandle) != pdPASS)
             {
                 ESP_LOGE(TAG, "Failed to create heater interface task");
+                set_led_status_flag("error_heating", true);
                 break;
             }
+            set_led_status_flag("error_heating", false);
             ESP_LOGD(TAG, "Heater interface task created successfully");
             ESP_LOGD(TAG, "Heater mode switched to AUTO_MODE");
             break;

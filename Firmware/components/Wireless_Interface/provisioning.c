@@ -1,7 +1,7 @@
 #include "Comm_Interface.h"
 #include "ble_service_tables.h"
 #include "defines.h"
-#include "app.h"
+#include "Storage_interface.h"
 #include "cJSON.h"
 
 #define TAG "PROVISION_MANAGER"
