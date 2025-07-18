@@ -10,11 +10,6 @@
 #include "driver/gpio.h"
 
 
-#undef TAG  // Undefine TAG from MyLD2410_esp.hpp if it exists
-#define TAG "PRESENCE_SENSOR"
-
-
-
 typedef struct {
     uint8_t resolutionMeters;
     uint8_t activeGates;
@@ -32,6 +27,8 @@ typedef struct {
 }SensitivityThresholds;
 
 bool LD2410_init();
+
+// need to change functions names to use same case; snake case
 bool sensorSetup();
 void groundSwitchCheck();
 void setDetectionDuration(uint8_t durationVal);

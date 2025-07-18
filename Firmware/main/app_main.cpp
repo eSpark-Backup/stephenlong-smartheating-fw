@@ -18,6 +18,7 @@
 #include "esp_timer.h"
 #include "ThingsBoard_interface.h"
 
+#define TAG     DEVICE_TAG
 
 TaskHandle_t xButtonTaskHandle = NULL;
 
@@ -973,22 +974,22 @@ void button_task(void * pvParameters)
 
 void button_init(void)
 {
-    // Configure GND_SW (GPIO10) as output for sensor board power control
-    gpio_config_t gnd_sw_cfg = {
-        .pin_bit_mask = GPIO_PIN_MASK(GND_SW),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&gnd_sw_cfg);
+    // // Configure GND_SW (GPIO10) as output for sensor board power control
+    // gpio_config_t gnd_sw_cfg = {
+    //     .pin_bit_mask = GPIO_PIN_MASK(GND_SW),
+    //     .mode = GPIO_MODE_OUTPUT,
+    //     .pull_up_en = GPIO_PULLUP_DISABLE,
+    //     .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    //     .intr_type = GPIO_INTR_DISABLE
+    // };
+    // gpio_config(&gnd_sw_cfg);
 
-    // Turn on sensor board power (MOSFET control)
-    gpio_set_level(GND_SW , true);
-    ESP_LOGI(GPIO_TAG, "Sensor board power enabled (GPIO10=HIGH)");
+    // // Turn on sensor board power (MOSFET control)
+    // gpio_set_level(GND_SW , true);
+    // ESP_LOGI(GPIO_TAG, "Sensor board power enabled (GPIO10=HIGH)");
 
-    // Allow time for sensor board to power up and stabilize
-    vTaskDelay(pdMS_TO_TICKS(100));  // 100ms delay for sensor stabilization
+    // // Allow time for sensor board to power up and stabilize
+    // vTaskDelay(pdMS_TO_TICKS(100));  // 100ms delay for sensor stabilization
 
     // Configure button GPIO - match ESPHome config (pulldown enabled)
     gpio_config_t btn_cfg = {
@@ -1001,36 +1002,36 @@ void button_init(void)
 
     esp_err_t ret = gpio_config(&btn_cfg);
     if (ret != ESP_OK) {
-        ESP_LOGE(GPIO_TAG, "Failed to configure button GPIO: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG GPIO_TAG, "Failed to configure button GPIO: %s", esp_err_to_name(ret));
         return;
     }
 
     // Read initial button state
     int initial_level = gpio_get_level(BUTTON_GPIO);
-    ESP_LOGI(GPIO_TAG, "Button GPIO%d configured, initial level: %d", BUTTON_GPIO, initial_level);
+    ESP_LOGI(TAG GPIO_TAG, "Button GPIO%d configured, initial level: %d", BUTTON_GPIO, initial_level);
 
     // Install GPIO ISR service
     ret = gpio_install_isr_service(0);  // Use ESP_INTR_FLAG_DEFAULT or 0
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {  // ESP_ERR_INVALID_STATE means already installed
-        ESP_LOGE(GPIO_TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG GPIO_TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
         return;
     }
 
     ret = gpio_isr_handler_add(BUTTON_GPIO, button_isr_handler, (void*)(uintptr_t)BUTTON_GPIO);
     if (ret != ESP_OK) {
-        ESP_LOGE(GPIO_TAG, "Failed to add ISR handler: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG GPIO_TAG, "Failed to add ISR handler: %s", esp_err_to_name(ret));
         return;
     }
 
-    ESP_LOGI(GPIO_TAG, "Button ISR successfully set up on GPIO%d", BUTTON_GPIO);
+    ESP_LOGI(TAG GPIO_TAG, "Button ISR successfully set up on GPIO%d", BUTTON_GPIO);
 
     if(xTaskCreate(button_task, "Button_Task", 8192, NULL, 1, &xButtonTaskHandle) != pdPASS)
     {
-        ESP_LOGE(GPIO_TAG, "Failed to create Button Task");
+        ESP_LOGE(TAG GPIO_TAG, "Failed to create Button Task");
         return;
     }
 
-    ESP_LOGI(GPIO_TAG, "Button task created successfully");
+    ESP_LOGI(TAG GPIO_TAG, "Button task created successfully");
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)
@@ -1177,16 +1178,15 @@ extern "C" void app_main(void)
     esp_log_level_set("HTTP_CLIENT", ESP_LOG_WARN); // Reduce HTTP client verbosity
     esp_log_level_set("esp-tls", ESP_LOG_WARN);     // Reduce TLS verbosity
     esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
-    
+
     status_led_init();
     device_data_init();
-    // button_init();  // This now turns on sensor board power (GPIO10)
-    
-    // // // Initialize sensors after power is applied to sensor board
-    // ESP_LOGI(DEVICE_TAG, "Starting LD2410 initialization...");
+    button_init();
+
+    // Initialize sensors after power is applied to sensor board
+    sensor_board_init();
     // LD2410_init();
-    // ESP_LOGI(DEVICE_TAG, "Starting IR sensor initialization...");
-    // ir_sensor_init();
+    ir_sensor_init();
     // heater_interface_init();
     
     // // Initialize energy tracking system

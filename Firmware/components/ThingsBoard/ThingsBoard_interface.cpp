@@ -38,7 +38,7 @@ esp_err_t thingsBoard_init(void)
     {
         ESP_LOGE(HTTPS_TAG, "Failed to create ThingsBoard task");
         set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW);
-        set_device_status(1, ERROR);
+        // set_device_status(1, ERROR);
         return ESP_FAIL;
     }
     ESP_LOGD(HTTPS_TAG, "ThingsBoard task created successfully");

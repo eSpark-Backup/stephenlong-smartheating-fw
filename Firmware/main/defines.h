@@ -7,7 +7,6 @@
 #include <esp_log.h>
 #include <hal/i2c_types.h>
 
-
 #define DEVICE_TEST
 
 #ifdef __cplusplus
@@ -88,7 +87,7 @@ extern "C" {
 #define SOFT_AP_TIMEOUT             MIN_TO_US(5) //5 mins
 
 #define BUTTON_GPIO                 GPIO_NUM_2   // <-- Your GPIO pin
-#define GND_SW                      GPIO_NUM_10  //Ground switch
+#define GND_SW                      GPIO_NUM_10  // Sensor board ground switch
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
 
 #define AP_RECONN_ATTEMPTS          5
@@ -105,7 +104,7 @@ extern "C" {
 #define GATTS_TAG                   "_BLE"
 #define ISR_TAG                     "_ISR"
 #define HTTPS_TAG                   "_ThingsBoard"
-#define LED_TAG                     "_LEDStrip"
+#define LED_TAG                     "_LED_Strip"
 
 #ifdef DEVICE_TEST
 #define LD2410_UART_TX              GPIO_NUM_7
@@ -256,32 +255,6 @@ typedef struct
     bool is_initialized;            // Flag to track if energy system is initialized
 } energy_tracking_t;
 
-
-
-// // LED Status Flags for centralized LED management
-// typedef struct {
-//     // Critical errors (highest priority - RED)
-//     bool error_critical;
-//     bool error_ir_sensor;
-//     bool error_heating;
-
-//     // Button feedback (high priority - various colors)
-//     bool button_ble_feedback;
-//     bool button_factory_reset_feedback;
-//     bool button_bypass_feedback;
-//     bool button_softap_feedback;
-
-//     // System operations (medium priority - PURPLE/BLUE)
-//     bool pairing_mode_active;
-//     bool firmware_update;
-//     bool factory_reset_confirmation;
-//     bool bypass_mode_active;
-
-//     // Normal operation (lowest priority - GREEN/YELLOW)
-//     bool normal_operation;
-//     bool wifi_connected;
-//     bool wifi_warning;
-// } led_status_flags_t;
 
 const char* get_enum_name(ENUM_TYPE type, int value);
 // void set_device_status(uint8_t op, int bitMask);

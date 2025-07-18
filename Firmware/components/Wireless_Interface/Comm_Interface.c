@@ -148,7 +148,7 @@ void comm_init(void)
     {
         ESP_LOGE(TAG, "Failed to create ble_command_task  task");
         set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
-        set_device_status(1, ERROR);
+        // set_device_status(1, ERROR);
         return;
     }
     ESP_LOGD(TAG, "ble_command_task created successfully");

@@ -29,7 +29,7 @@ void start_softap_provisioning(void)
     set_led_effect(LED_EFFECT_BLINK, BLUE ,LED_SPEED_SLOW );
     start_webserver();
 
-    set_device_status(1, PAIRING);
+    // set_device_status(1, PAIRING);
 }
 
 void stop_softap_provisioning(void)
@@ -45,7 +45,7 @@ void stop_softap_provisioning(void)
     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
     wifi_init_sta(device_data.ssid, device_data.password);
     set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
-    set_device_status(0, PAIRING);
+    // set_device_status(0, PAIRING);
 }
 
 httpd_handle_t start_webserver(void)
@@ -290,7 +290,7 @@ void event_handler(void *arg, esp_event_base_t event_base,
 
         set_led_effect(LED_EFFECT_BLINK, GREEN ,LED_SPEED_SLOW );
         set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
-        set_device_status(0, PAIRING);
+        // set_device_status(0, PAIRING);
 
         // Exit BLE pairing mode and restore normal operation
         set_led_status_flag("pairing_mode_active", false);

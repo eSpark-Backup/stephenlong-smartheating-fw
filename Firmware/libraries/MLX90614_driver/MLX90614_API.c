@@ -51,7 +51,10 @@ int MLX90614_GetTa(uint8_t slaveAddr, float *ta)
         return -4;
     }
 
-    *ta = (float)data * 0.02f - 273.15;
+    if (error == 0)
+    {
+        *ta = (float)data * 0.02f - 273.15;
+    }
 
     return error;
 }

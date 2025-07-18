@@ -60,7 +60,7 @@ int MLX90614_SMBusRead(uint8_t slaveAddr, uint8_t reg_addr, uint16_t *data){
     i2c_master_read(cmd, recived_data, 2, ACK_VAL);
     i2c_master_read_byte(cmd, recived_data + 2, NACK_VAL);
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);  // Increased timeout to 1000ms
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, pdMS_TO_TICKS(10));  // Increased timeout to 10ms
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         pec = Calculate_PEC(0, pec);
@@ -110,7 +110,7 @@ int MLX90614_SMBusWrite(uint8_t slaveAddr, uint8_t writeAddress, uint16_t data)
         i2c_master_write_byte(cmd, send_data[i], ACK_CHECK_EN);
     }
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);  // Increased timeout to 1000ms
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, pdMS_TO_TICKS(10));  // Increased timeout to 10ms
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Write OK");
@@ -159,7 +159,7 @@ int MLX90614_SendCommand(uint8_t slaveAddr, uint8_t command)
         i2c_master_write_byte(cmd, send_data[i], ACK_CHECK_EN);
     }
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, 1000 / portTICK_PERIOD_MS);  // Increased timeout to 1000ms
+    esp_err_t ret = i2c_master_cmd_begin(interface, cmd, pdMS_TO_TICKS(10));  // Increased timeout to 10ms
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Write OK");

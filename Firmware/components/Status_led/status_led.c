@@ -25,6 +25,21 @@
     } \
 }
 
+///*
+#define SET_LED_FLAG(field)                                          \
+    do {                                                             \
+        if (strcmp(flag_name, #field) == 0) {                        \
+            if (led_flags.field != value) {                          \
+                led_flags.field = value;                             \
+                ESP_LOGD(TAG, "%s LED status flag: %s",              \
+                         (value ? "Setting" : "Resetting"), #field); \
+            }                                                        \
+            xSemaphoreGive(led_flags_mutex);                         \
+            return;                                                  \
+        }                                                            \
+    } while (0)
+//*/
+
 static uint8_t led_strip_pixels_state1[LED_NUMBERS * 3];
 static uint8_t led_strip_pixels_state2[LED_NUMBERS * 3];
 rmt_channel_handle_t led_chan = NULL;
@@ -34,9 +49,6 @@ rmt_transmit_config_t tx_config = {
 };
 
 
-// COLORS colorSel = NONE;
-// EFFECT_SPEED effecSpeed = NO_SPEED;
-// led_effect_t current_effect = LED_EFFECT_NONE;
 LED_STATE_T current_led_state = {LED_EFFECT_NONE, NONE, NO_SPEED, false};
 
 static RGB_CODE rgbcode ={0,0,0};
@@ -59,9 +71,10 @@ void status_led_task(void * pvParameters)
     uint64_t time_stamp = esp_timer_get_time();
     while(1)
     {
-        if ((led_flags_mutex != NULL) && ((esp_timer_get_time() - time_stamp) > MS_TO_US(150)))
+        uint64_t now = esp_timer_get_time();
+        if ((led_flags_mutex != NULL) && ((now - time_stamp) > MS_TO_US(150)))
         {
-            time_stamp = esp_timer_get_time();
+            time_stamp = now;
 
             if(xSemaphoreTake(led_flags_mutex, pdMS_TO_TICKS(10)) == pdTRUE)
             {
@@ -75,10 +88,10 @@ void status_led_task(void * pvParameters)
         {
             // Default behavior: show status LED normally
             ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state1, sizeof(led_strip_pixels_state1), &tx_config));
-            ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+            ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
             vTaskDelay(pdMS_TO_TICKS(CHASE_SPEED_MS));
             ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state2, sizeof(led_strip_pixels_state2), &tx_config));
-            ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+            ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
             vTaskDelay(pdMS_TO_TICKS(CHASE_SPEED_MS));
         }
         else
@@ -97,7 +110,7 @@ void led_idle()
 
     SET_COLOR(state1, code_rgb.red, code_rgb.green, code_rgb.blue);
     ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state1, sizeof(led_strip_pixels_state1), &tx_config));
-    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
     vTaskDelay(pdMS_TO_TICKS(effect_delay(30)));
 }
 void led_blink_effect()
@@ -106,12 +119,12 @@ void led_blink_effect()
 
     SET_COLOR(state1, code_rgb.red, code_rgb.green, code_rgb.blue);
     ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state1, sizeof(led_strip_pixels_state1), &tx_config));
-    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
     vTaskDelay(pdMS_TO_TICKS(effect_delay(current_led_state.speed)));
 
     SET_COLOR(state2, 0, 0, 0);
     ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state2, sizeof(led_strip_pixels_state2), &tx_config));
-    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
     vTaskDelay(pdMS_TO_TICKS(effect_delay(current_led_state.speed)));
 }
 
@@ -125,7 +138,7 @@ void led_breath_effect()
             increasing = false;}
         SET_COLOR(state1, (code_rgb.red * brightness) / 255, (code_rgb.green * brightness) / 255, (code_rgb.blue * brightness) / 255);
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state1, sizeof(led_strip_pixels_state1), &tx_config));
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
     }
     else
     {
@@ -134,7 +147,7 @@ void led_breath_effect()
             increasing = true;}
         SET_COLOR(state2, (code_rgb.red * brightness) / 255, (code_rgb.green * brightness) / 255, (code_rgb.blue * brightness) / 255);
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state2, sizeof(led_strip_pixels_state2), &tx_config));
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
     }
     vTaskDelay(pdMS_TO_TICKS((effect_delay(current_led_state.speed))/100));
 
@@ -147,12 +160,12 @@ void led_double_blink_effect()
     {
         SET_COLOR(state1, code_rgb.red, code_rgb.green, code_rgb.blue);
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state1, sizeof(led_strip_pixels_state1), &tx_config));
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
         vTaskDelay(pdMS_TO_TICKS(100));
 
         SET_COLOR(state2, 0, 0, 0);
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state2, sizeof(led_strip_pixels_state2), &tx_config));
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     vTaskDelay(pdMS_TO_TICKS(effect_delay(current_led_state.speed)));
@@ -166,12 +179,12 @@ void led_tripple_flash_effect()
     {
         SET_COLOR(state1, code_rgb.red, code_rgb.green, code_rgb.blue);
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state1, sizeof(led_strip_pixels_state1), &tx_config));
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
         vTaskDelay(pdMS_TO_TICKS(70));
 
         SET_COLOR(state2, 0, 0, 0);
         ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels_state2, sizeof(led_strip_pixels_state2), &tx_config));
-        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+        ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, pdMS_TO_TICKS(100)));
         vTaskDelay(pdMS_TO_TICKS(70));
     }
     vTaskDelay(pdMS_TO_TICKS(effect_delay(current_led_state.speed)));
@@ -183,34 +196,26 @@ void set_led_status_flag(const char* flag_name, bool value)
 {
     if (led_flags_mutex == NULL) return;
 
-    if (xSemaphoreTake(led_flags_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        ESP_LOGD(TAG, "%s LED status flag: %s", ((value) ? "Setting": "Resetting"), flag_name);
+    if (xSemaphoreTake(led_flags_mutex, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+        SET_LED_FLAG(erase_nvs);
+        SET_LED_FLAG(error_critical);
+        SET_LED_FLAG(error_ir_sensor);
+        SET_LED_FLAG(error_heating);
+        SET_LED_FLAG(error_nvs);
+        SET_LED_FLAG(button_ble_feedback);
+        SET_LED_FLAG(button_factory_reset_feedback);
+        SET_LED_FLAG(button_bypass_feedback);
+        SET_LED_FLAG(button_softap_feedback);
+        SET_LED_FLAG(pairing_mode_active);
+        SET_LED_FLAG(firmware_update);
+        SET_LED_FLAG(factory_reset_confirmation);
+        SET_LED_FLAG(bypass_mode_active);
+        SET_LED_FLAG(normal_operation);
+        SET_LED_FLAG(wifi_connected);
+        SET_LED_FLAG(wifi_warning);
 
-        if (strcmp(flag_name, "erase_nvs") == 0) led_flags.erase_nvs = value;
-        
-        // Critical errors (highest priority)
-        else if (strcmp(flag_name, "error_critical") == 0) led_flags.error_critical = value;
-        else if (strcmp(flag_name, "error_ir_sensor") == 0) led_flags.error_ir_sensor = value;
-        else if (strcmp(flag_name, "error_heating") == 0) led_flags.error_heating = value;
-        else if (strcmp(flag_name, "error_nvs") == 0) led_flags.error_nvs = value;
-
-        // Button feedback (high priority)
-        else if (strcmp(flag_name, "button_ble_feedback") == 0) led_flags.button_ble_feedback = value;
-        else if (strcmp(flag_name, "button_factory_reset_feedback") == 0) led_flags.button_factory_reset_feedback = value;
-        else if (strcmp(flag_name, "button_bypass_feedback") == 0) led_flags.button_bypass_feedback = value;
-        else if (strcmp(flag_name, "button_softap_feedback") == 0) led_flags.button_softap_feedback = value;
-
-        // System operations (medium priority)
-        else if (strcmp(flag_name, "pairing_mode_active") == 0) led_flags.pairing_mode_active = value;
-        else if (strcmp(flag_name, "firmware_update") == 0) led_flags.firmware_update = value;
-        else if (strcmp(flag_name, "factory_reset_confirmation") == 0) led_flags.factory_reset_confirmation = value;
-        else if (strcmp(flag_name, "bypass_mode_active") == 0) led_flags.bypass_mode_active = value;
-
-        // Normal operation (lowest priority)
-        else if (strcmp(flag_name, "normal_operation") == 0) led_flags.normal_operation = value;
-        else if (strcmp(flag_name, "wifi_connected") == 0) led_flags.wifi_connected = value;
-        else if (strcmp(flag_name, "wifi_warning") == 0) led_flags.wifi_warning = value;
-
+        ESP_LOGE(TAG, "Unknown LED status flag: %s", flag_name);
         xSemaphoreGive(led_flags_mutex);
     }
 }

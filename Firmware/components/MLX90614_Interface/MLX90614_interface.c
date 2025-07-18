@@ -15,33 +15,34 @@
 
 #define TAG "IR_SENSOR"
 
-#define NEGATIVE_FILTER_CHECK(var)                  \
-        do {                                        \
-            if ((var) >= 0 && !isnan(var)) {       \
-                CircularBuffer_Push(&dataBuffer##var, (var)); \
-            }                                       \
-        } while (0)
+#define NEGATIVE_FILTER_CHECK(var)                                              \
+    do {                                                                        \
+        if ((var) >= 0 && !isnan(var)) {                                        \
+            CircularBuffer_Push(&dataBuffer##var, (var));                       \
+        } else if (isnan(var)) {                                                \
+            ESP_LOGW(TAG, "NaN detected in sensor readings, %s", #var);         \
+        }                                                                       \
+    } while (0)
 
-#define CHECK_ERROR(expression)                             \
-        error = expression;                                 \
-        do {                                                \
-            if (error != ESP_OK) {                          \
-                ESP_LOGE(TAG, "Error: %d", error);          \
-                set_device_status(1, ERROR_IR_SENSOR);      \
-                set_led_status_flag("error_ir_sensor", true); \
-                break;                                      \
-            }                                               \
-            else { set_device_status(0, ERROR_IR_SENSOR);   \
-                 set_led_status_flag("error_ir_sensor", false); \
-                }                                                         \
-        } while (0);                                        \
-        if(error != ESP_OK) continue;
+#define CHECK_ERROR(func, var)                                           \
+    do {                                                                 \
+        esp_err_t result = func(MLX90614_I2C_ADDR1, &(var));             \
+        if (result != ESP_OK) {                                          \
+            ESP_LOGE(TAG, "Failed to read %s: error=%d", #var, result);   \
+            set_led_status_flag("error_ir_sensor", true);                \
+            failed_reads++;                                              \
+            if (error == ESP_OK) error = result;                         \
+        } else {                                                         \
+            set_led_status_flag("error_ir_sensor", false);               \
+        }                                                                \
+    } while (0)
+    // if(error != ESP_OK) continue;
 
 DEVICE_STATUS* _device_status = NULL; // Pointer to device status
 circular_buffer_t dataBufferTa, dataBufferTo;            // circular buffer for Tambient and Tobject data
 temperature_sensor_handle_t temp_sensor = NULL;
 
-void printMLX90614DetailedMetrics(float Ta, float To, uint16_t ir1, uint16_t ir2, float Toperative, uint8_t restartCount) {
+void print_MLX90614_detailed_metrics(float Ta, float To, uint16_t ir1, uint16_t ir2, float Toperative, uint8_t restartCount) {
     // Check if there was a temperature shock in this cycle
     static float prev_operative_for_basic_log = 0.0f;
     static bool first_basic_log = true;
@@ -151,15 +152,17 @@ void ir_sensor_task(void * pvParameters)
         uint16_t ir2 = 0;
         int error = ESP_OK;
 
-
         // Track I2C communication health
         static uint32_t successful_reads = 0;
         static uint32_t failed_reads = 0;
 
-        esp_err_t ta_result = MLX90614_GetTa(MLX90614_I2C_ADDR1, &Ta);
-        esp_err_t to_result = MLX90614_GetTo(MLX90614_I2C_ADDR1, &To);
-        esp_err_t ir1_result = MLX90614_GetIRdata1(MLX90614_I2C_ADDR1, &ir1);
-        esp_err_t ir2_result = MLX90614_GetIRdata2(MLX90614_I2C_ADDR1, &ir2);
+        // On esp32c6 devboard, if power is disabled on IR module, i2c module breaks as it fails to reset the module
+        // Since the sensor is physically powered off, so the I2C lines never respond (likely held low)
+        // This causes internal polling loops in the ESP-IDF driver to stall or retry excessively. and trigger watchdog
+        CHECK_ERROR(MLX90614_GetTa, Ta);
+        CHECK_ERROR(MLX90614_GetTo, To);
+        CHECK_ERROR(MLX90614_GetIRdata1, ir1);
+        CHECK_ERROR(MLX90614_GetIRdata2, ir2);
 
         // Log I2C communication health every 120 seconds (reduced frequency)
         static uint32_t health_counter = 0;
@@ -171,50 +174,14 @@ void ir_sensor_task(void * pvParameters)
             health_counter = 0;
         }
 
-        // Check each read result individually for better debugging
-        if (ta_result != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to read Ta: error=%d", ta_result);
-            failed_reads++;
-            error = ta_result;
-        }
-        if (to_result != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to read To: error=%d", to_result);
-            failed_reads++;
-            error = (error == ESP_OK) ? to_result : error;
-        }
-        if (ir1_result != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to read IR1: error=%d", ir1_result);
-            failed_reads++;
-            error = (error == ESP_OK) ? ir1_result : error;
-        }
-        if (ir2_result != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to read IR2: error=%d", ir2_result);
-            failed_reads++;
-            error = (error == ESP_OK) ? ir2_result : error;
-        }
-
-        if (ta_result == ESP_OK && to_result == ESP_OK && ir1_result == ESP_OK && ir2_result == ESP_OK) {
+        // if (ta_result == ESP_OK && to_result == ESP_OK && ir1_result == ESP_OK && ir2_result == ESP_OK) {
+        if (error == ESP_OK) {
             successful_reads++;
         }
         
-        // Additional validation: check for NaN values even if read was successful
-        if (!isnan(Ta) && !isnan(To)) {
-            // Values are valid numbers, continue processing
-        } else {
-            ESP_LOGW(TAG, "NaN detected in sensor readings: Ta=%s, To=%s", 
-                     isnan(Ta) ? "NaN" : "OK", isnan(To) ? "NaN" : "OK");
-            continue; // Skip this iteration if we have NaN values
-        }
+        NEGATIVE_FILTER_CHECK(To);
+        NEGATIVE_FILTER_CHECK(Ta);
 
-        // Use existing error handling macro
-        if (error != ESP_OK) {
-            ESP_LOGE(TAG, "Error: %d", error);
-            set_device_status(1, ERROR_IR_SENSOR);
-            set_led_status_flag("error_ir_sensor", true);
-        } else {
-            set_device_status(0, ERROR_IR_SENSOR);
-            set_led_status_flag("error_ir_sensor", false);
-        }
         if(error != ESP_OK) continue;
 
         // Log raw data only periodically to reduce spam
@@ -224,9 +191,6 @@ void ir_sensor_task(void * pvParameters)
             ESP_LOGI(TAG, "Raw Data: Ta=%.2f°C, To=%.2f°C, IR1=%d, IR2=%d", Ta, To, ir1, ir2);
             data_log_counter = 0;
         }
-
-        NEGATIVE_FILTER_CHECK(To);
-        NEGATIVE_FILTER_CHECK(Ta);
 
         // Calculate and log operative temperature
         float Toperative = get_operative_temp();
@@ -249,11 +213,13 @@ void ir_sensor_task(void * pvParameters)
         first_reading = false;
 
         // Print detailed metrics periodically
-        printMLX90614DetailedMetrics(Ta, To, ir1, ir2, Toperative, restartCount);
+        print_MLX90614_detailed_metrics(Ta, To, ir1, ir2, Toperative, restartCount);
 
+
+        // --------------------TODO: HANDLE BLE NOTIFICATIONS IN BLE TASK----------------------
         // Send BLE temperature streaming notification with adaptive timing
         // Only send if we have valid temperature readings and enough time has passed
-        int64_t current_time = esp_timer_get_time() / 1000; // Convert to milliseconds
+        int64_t current_time = US_TO_MS(esp_timer_get_time()); // Convert to milliseconds
         
         // Determine BLE streaming interval based on presence and activity (matches telemetry pattern)
         bool presence_detected = get_presence_detected();
@@ -353,8 +319,9 @@ esp_err_t ir_sensor_init(void)
     if(xTaskCreate(ir_sensor_task, "IR_Sensor_Task", 8192, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create IR sensor task");
-        set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
-        set_device_status(1, ERROR);
+        // set_device_status(1, ERROR);
+        // set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
+        set_led_status_flag("error_ir_sensor", true);
         return ESP_FAIL;
     }
     ESP_LOGD(TAG, "IR sensor task created successfully");
@@ -447,6 +414,9 @@ void CircularBuffer_Init(circular_buffer_t* cb)
     cb->head = 0;
     cb->tail = 0;
     cb->count = 0;
+    for (int i = 0; i < BUFFER_SIZE; i++) {
+        cb->buffer[i] = NAN; // Initialize all elements to NaN
+    }
 }
 
 // Check if buffer is full

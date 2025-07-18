@@ -3,6 +3,7 @@
 #include <nvs_flash.h>
 #include <esp_log.h>
 #include "esp_timer.h"
+#include "driver/gpio.h"
 
 #define TAG     DEVICE_TAG
 
@@ -56,7 +57,7 @@ esp_err_t device_data_init(void)
         if (err != ESP_OK)
         {
             device_data.duration_val = 0;
-            ESP_LOGE(TAG, "Presence detection duration val not set 0.");
+            ESP_LOGE(TAG, "Presence detection duration not set. Setting to 0.");
             nvs_set_u8(nvs, NVS_KEY_DETECTION_DURATION, device_data.duration_val);
             nvs_commit(nvs);
         }
@@ -85,6 +86,7 @@ esp_err_t device_data_init(void)
  * @param op: operation to perform
               0: store device mode
               1: store target temperature
+              2: store presence detection duration value
  */
 esp_err_t device_data_set(uint8_t op)
 {
@@ -129,11 +131,11 @@ esp_err_t reset_device_and_erase_nvs()
     // Erase all NVS partitions
     err = nvs_flash_erase();
     if (err != ESP_OK) {
-        ESP_LOGE("RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG "_RESET", "Failed to erase NVS: %s", esp_err_to_name(err));
         return err;
     }
 
-    ESP_LOGI("RESET", "NVS erased, restarting device...");
+    ESP_LOGI(TAG "_RESET", "NVS erased, restarting device...");
     return err;
 }
 
@@ -152,10 +154,8 @@ float get_target_temp(void)
 
 void set_detection_duration(uint8_t duration_val)
 {
-    // device_data.target_temp = target_temp;
     device_data.duration_val = duration_val;
     ESP_LOGD(TAG, "Presence Detection Duration time set to: %x", device_data.duration_val);
-
 
     device_data_set(2);
 }
@@ -168,7 +168,7 @@ float get_detection_duration(void)
 void set_device_mode(DEVICE_MODE mode)
 {
     device_data.mode = mode;
-    // ESP_LOGD(DEVICE_TAG, "Device mode set to: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
+    ESP_LOGD(TAG, "Device mode set to: %s", get_enum_name(ENUM_DEVICE_MODE, device_data.mode));
 
     device_data_set(0);
 }
@@ -217,7 +217,7 @@ static int64_t last_presence_detected_time = 0;
 
 int calculate_telemetry_interval_seconds(bool presence_detected)
 {
-    int64_t current_time = esp_timer_get_time() / 1000; // Convert to milliseconds
+    int64_t current_time = US_TO_MS(esp_timer_get_time());
 
     if (presence_detected) {
         current_telemetry_interval = PRESENCE_TELEMETRY_TIME; // 10 seconds
@@ -242,6 +242,41 @@ int calculate_telemetry_interval_seconds(bool presence_detected)
 void update_presence_detection_time(bool presence_detected)
 {
     if (presence_detected) {
-        last_presence_detected_time = esp_timer_get_time() / 1000; // Convert to milliseconds
+        last_presence_detected_time = US_TO_MS(esp_timer_get_time());
+    }
+}
+
+void sensor_board_init(void)
+{
+    // Initialize GPIO for sensor board power
+    gpio_config_t io_conf = {
+        .pin_bit_mask = GPIO_PIN_MASK(GND_SW),
+        .mode = GPIO_MODE_INPUT_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
+
+    // Set initial state to ON
+    set_sensor_board_power(true);
+    ESP_LOGI(TAG GPIO_TAG, "Sensor board initialized.");
+}
+
+void set_sensor_board_power(bool enable)
+{
+    if (gpio_get_level(GND_SW) == enable)
+    {
+        ESP_LOGD(TAG GPIO_TAG, "Sensor board power already %s", enable ? "enabled" : "disabled");
+        return;
+    }
+
+    gpio_set_level(GND_SW, enable);
+    ESP_LOGD(TAG GPIO_TAG, "Sensor board power %s", gpio_get_level(GND_SW) ? "enabled" : "disabled");
+
+    if (enable)
+    {
+        // Allow time for sensor board to power up and stabilize
+        vTaskDelay(pdMS_TO_TICKS(100));  // 100ms delay for sensor stabilization
     }
 }
