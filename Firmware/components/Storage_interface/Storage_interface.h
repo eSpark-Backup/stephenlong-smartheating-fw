@@ -35,6 +35,7 @@ void set_heating_time(uint32_t heating_time);
 uint32_t get_heating_time(void);
 void set_update_time(int64_t update_time);
 int64_t get_update_time(void);
+bool is_energy_data_initialized(void);
 
 //---------------------------------
 // Shared telemetry interval management

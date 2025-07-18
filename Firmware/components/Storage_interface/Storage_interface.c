@@ -308,7 +308,7 @@ void set_energy_consumed(float energy_consumed)
     energy_data.energy_consumed_kwh = energy_consumed;
     ESP_LOGD(TAG, "Energy consumed set to: %.2f", energy_data.energy_consumed_kwh);
 
-    energy_data_set(0);
+    // energy_data_set(0);
 }
 
 float get_energy_consumed(void)
@@ -321,7 +321,7 @@ void set_heating_time(uint32_t heating_time)
     energy_data.heating_time_seconds = heating_time;
     ESP_LOGD(TAG, "Heating time set to: %lu", energy_data.heating_time_seconds);
 
-    energy_data_set(1);
+    // energy_data_set(1);
 }
 
 uint32_t get_heating_time(void)
@@ -334,12 +334,17 @@ void set_update_time(int64_t update_time)
     energy_data.last_update_time = update_time;
     ESP_LOGD(TAG, "Last update time set to: %lli", energy_data.last_update_time);
 
-    energy_data_set(2);
+    // energy_data_set(2);
 }
 
 int64_t get_update_time(void)
 {
     return energy_data.last_update_time;
+}
+
+bool is_energy_data_initialized(void)
+{
+    return energy_data.is_initialized;
 }
 
 // Shared telemetry interval management

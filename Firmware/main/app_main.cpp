@@ -22,20 +22,8 @@
 
 TaskHandle_t xButtonTaskHandle = NULL;
 
-// Forward declarations for energy functions
-static float calculate_current_power_consumption(void);
-static uint8_t calculate_heating_efficiency(void);
-static void energy_timer_callback(void *arg);
+// Forward declarations
 static void wifi_monitoring_task(void *pvParameters);
-
-// // Energy tracking global variables
-// static energy_tracking_t energy_data = {
-//     .energy_consumed_kwh = 0.0f,
-//     .heating_time_seconds = 0,
-//     .last_update_time = 0,
-//     .is_initialized = false
-// };
-static esp_timer_handle_t energy_timer_handle;
 
 ButtonFlags buttonflag={
         false, // BLEPairFlag
@@ -67,153 +55,40 @@ static bool softAPOngoing= false;
 // LED feedback state tracking
 static bool button_led_feedback_active = false;
 
-// // Centralized LED Status Flags
-// static led_status_flags_t led_flags = {
-//     .error_critical = false,
-//     .error_ir_sensor = false,
-//     .error_heating = false,
-//     .button_ble_feedback = false,
-//     .button_factory_reset_feedback = false,
-//     .button_bypass_feedback = false,
-//     .button_softap_feedback = false,
-//     .pairing_mode_active = false,
-//     .firmware_update = false,
-//     .factory_reset_confirmation = false,
-//     .bypass_mode_active = false,
-//     .normal_operation = false,
-//     .wifi_connected = false,
-//     .wifi_warning = false
-// };
-// static SemaphoreHandle_t led_flags_mutex = NULL;
 
-// LED Manager Task Handle
-// static TaskHandle_t led_manager_task_handle = NULL;
+// Function to reset energy data (useful for testing/debugging)
+__attribute__((unused)) static esp_err_t energy_data_reset(void)
+{
+    set_energy_consumed(0.0f);
+    set_heating_time(0);
+    set_update_time(esp_timer_get_time());
 
-// Energy tracking NVS functions
+    ESP_LOGI(TAG, "Energy data reset");
+    return energy_data_set(255);
+}
 
+// Function to get current energy statistics (useful for debugging)
+__attribute__((unused)) static void energy_data_print_stats(void)
+{
+    if (!is_energy_data_initialized()) {
+        ESP_LOGW(TAG, "Energy system not initialized");
+        return;
+    }
 
+    float current_power = calculate_current_power_consumption();
+    uint8_t efficiency = calculate_heating_efficiency();
+    HEATER_STATE current_state = get_heater_state();
 
-
-// // Function to reset energy data (useful for testing/debugging)
-// __attribute__((unused)) static esp_err_t energy_data_reset(void)
-// {
-//     energy_data.energy_consumed_kwh = 0.0f;
-//     energy_data.heating_time_seconds = 0;
-//     energy_data.last_update_time = esp_timer_get_time();
-
-//     ESP_LOGI(DEVICE_TAG, "Energy data reset");
-//     // return energy_data_save_to_nvs();
-//     return energy_data_set(255);
-// }
-
-// // Function to get current energy statistics (useful for debugging)
-// __attribute__((unused)) static void energy_data_print_stats(void)
-// {
-//     if (!energy_data.is_initialized) {
-//         ESP_LOGW(DEVICE_TAG, "Energy system not initialized");
-//         return;
-//     }
-
-//     float current_power = calculate_current_power_consumption();
-//     uint8_t efficiency = calculate_heating_efficiency();
-//     HEATER_STATE current_state = get_heater_state();
-
-//     ESP_LOGI(DEVICE_TAG, "=== Energy Statistics ===");
-//     ESP_LOGI(DEVICE_TAG, "Current Power: %.1f W", current_power);
-//     ESP_LOGI(DEVICE_TAG, "Heater State: %s", get_enum_name(ENUM_HEATER_STATE, current_state));
-//     ESP_LOGI(DEVICE_TAG, "Total Energy: %.3f kWh", energy_data.energy_consumed_kwh);
-//     ESP_LOGI(DEVICE_TAG, "Heating Time: %lu seconds (%.1f hours)",
-//              energy_data.heating_time_seconds,
-//              (float)energy_data.heating_time_seconds / 3600.0f);
-//     ESP_LOGI(DEVICE_TAG, "Efficiency: %d%%", efficiency);
-//     ESP_LOGI(DEVICE_TAG, "========================");
-// }
-
-// // Energy calculation functions
-// static float calculate_current_power_consumption(void)
-// {
-//     HEATER_STATE current_state = get_heater_state();
-//     float power = 0.0f;
-
-//     switch (current_state) {
-//         case HEATER_OFF:
-//             power = 0.0f;
-//             break;
-//         case HEATER_LOW:
-//             power = HEATING_LOW_WATTS;
-//             break;
-//         case HEATER_MID:
-//             power = HEATING_HIGH_WATTS;
-//             break;
-//         case HEATER_HIGH:
-//             power = HEATING_LOW_WATTS + HEATING_HIGH_WATTS;
-//             break;
-//         default:
-//             power = 0.0f;
-//             break;
-//     }
-
-//     return power;
-// }
-
-// static uint8_t calculate_heating_efficiency(void)
-// {
-//     // Calculate efficiency based on heating duty cycle over the last period
-//     // This is a simplified efficiency calculation
-//     float target_temp = get_target_temp();
-//     float current_temp = get_operative_temp();
-
-//     if (target_temp <= 0) {
-//         return 0; // No target set
-//     }
-
-//     float temp_diff = target_temp - current_temp;
-
-//     // Simple efficiency calculation: closer to target = higher efficiency
-//     if (temp_diff <= 0.5f && temp_diff >= -0.5f) {
-//         return 95; // Very close to target
-//     } else if (temp_diff <= 1.0f && temp_diff >= -1.0f) {
-//         return 85; // Close to target
-//     } else if (temp_diff <= 2.0f && temp_diff >= -2.0f) {
-//         return 70; // Moderately close
-//     } else {
-//         return 50; // Far from target
-//     }
-// }
-
-// static void energy_timer_callback(void *arg)
-// {
-//     if (!energy_data.is_initialized) {
-//         return;
-//     }
-
-//     int64_t current_time = esp_timer_get_time();
-//     int64_t time_diff_us = current_time - energy_data.last_update_time;
-//     float time_diff_hours = (float)time_diff_us / (1000000.0f * 3600.0f); // Convert to hours
-
-//     float current_power = calculate_current_power_consumption();
-
-//     // Update energy consumption (integrate power over time)
-//     energy_data.energy_consumed_kwh += (current_power * time_diff_hours) / 1000.0f; // Convert watts to kW
-
-//     // Update heating time if any heating is active
-//     if (current_power > 0) {
-//         energy_data.heating_time_seconds += (uint32_t)(time_diff_us / 1000000); // Convert to seconds
-//     }
-
-//     energy_data.last_update_time = current_time;
-
-//     // Save to NVS every 60 seconds to avoid excessive flash writes
-//     static int save_counter = 0;
-//     save_counter++;
-//     if (save_counter >= 60) {
-//         // energy_data_save_to_nvs();
-//         energy_data_set(255);
-//         save_counter = 0;
-//         ESP_LOGD(DEVICE_TAG, "Energy data saved: %.3f kWh, %lu seconds, %.1f W",
-//                  energy_data.energy_consumed_kwh, energy_data.heating_time_seconds, current_power);
-//     }
-// }
+    ESP_LOGI(TAG, "=== Energy Statistics ===");
+    ESP_LOGI(TAG, "Current Power: %.1f W", current_power);
+    ESP_LOGI(TAG, "Heater State: %s", get_enum_name(ENUM_HEATER_STATE, current_state));
+    ESP_LOGI(TAG, "Total Energy: %.3f kWh", get_energy_consumed());
+    ESP_LOGI(TAG, "Heating Time: %lu seconds (%.1f hours)",
+             get_heating_time(),
+             (float)get_heating_time() / 3600.0f);
+    ESP_LOGI(TAG, "Efficiency: %d%%", efficiency);
+    ESP_LOGI(TAG, "========================");
+}
 
 static void IRAM_ATTR button_isr_handler(void *arg)
 {
@@ -1074,30 +949,10 @@ extern "C" void app_main(void)
     LD2410_init();
     ir_sensor_init();
     heater_interface_init();
-    
-    // // Initialize energy tracking system
-    // ESP_LOGI(DEVICE_TAG, "Initializing energy tracking system...");
-    // energy_data_load_from_nvs();
-    
-    // // Create energy tracking timer
-    // esp_timer_create_args_t energy_timer_args = {
-    //     .callback = energy_timer_callback,
-    //     .arg = NULL,
-    //     .dispatch_method = ESP_TIMER_TASK,
-    //     .name = "energy_timer",
-    //     .skip_unhandled_events = false
-    // };
-    
-    // esp_err_t timer_err = esp_timer_create(&energy_timer_args, &energy_timer_handle);
-    // if (timer_err == ESP_OK) {
-    //     esp_timer_start_periodic(energy_timer_handle, ENERGY_UPDATE_INTERVAL);
-    //     ESP_LOGI(DEVICE_TAG, "Energy tracking timer started successfully");
-    // } else {
-    //     ESP_LOGE(DEVICE_TAG, "Failed to create energy tracking timer: %s", esp_err_to_name(timer_err));
-    // }
-    
-    // // set_heater_temp(27.5);
-    // // set_heater_mode(AUTO_MODE);
+
+   
+    // set_heater_temp(27.5);
+    // set_heater_mode(AUTO_MODE);
     
     // comm_init();
    

@@ -23,6 +23,8 @@ HEATER_STATE get_heater_state(void);
 HEATER_STATE control_heater(float setpoint, float current_temp);
 void operate_heater(void);
 
+float calculate_current_power_consumption(void);
+uint8_t calculate_heating_efficiency(void);
 
 #ifdef __cplusplus
 }
