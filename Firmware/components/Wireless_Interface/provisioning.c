@@ -141,27 +141,31 @@ esp_err_t scan_results_handler(httpd_req_t *req)
     int err = 0;
     wifiSSIDJSON = (char *)malloc(1024 * sizeof(char)); // Allocate memory for JSON response
     // char *json = create_wifi_scan_json(filteredNetworks, filteredNetworksCount);
-    if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
+    if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 1024*6, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
     {
         ESP_LOGE(TAG WIFI_TAG, "Failed to create wifi_scan_task  task");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "WiFi scan failed");
+        // stop_softap_provisioning();
         return ESP_FAIL;
-    } 
+    }
     vTaskDelay(pdMS_TO_TICKS(500)); // Delay for 1 second
-    while(scanInProgress && !scanfinsihed){
+    while(scanInProgress && !scanFinished){
         vTaskDelay(pdMS_TO_TICKS(10)); // Delay for 1 second
     };
     if(strlen(wifiSSIDJSON) > 0){
         ESP_LOGI(TAG WIFI_TAG, "Sending Network JSON on Portal");
         httpd_resp_set_type(req, "application/json");
-        // err = httpd_resp_send(req, "{\"action\":\"scan_result\",\"networks\":[{\"ssid\":\"StormFiber-2.4G\",\"rssi\":-62,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":1},{\"ssid\":\"eSpark Wifi\",\"rssi\":-62,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":6},{\"ssid\":\"StormFiber-E290\",\"rssi\":-65,\"auth\":\"WIFI_AUTH_WPA_WPA2_PSK\",\"channel\":11},{\"ssid\":\"Vozye Mash network\",\"rssi\":-86,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":7},{\"ssid\":\"BEACONET-GUEST\",\"rssi\":-87,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":1},{\"ssid\":\"BEACONET-STAFF\",\"rssi\":-88,\"auth\":\"WIFI_AUTH_OPEN\",\"channel\":1},{\"ssid\":\"BEACONET-STUDENT\",\"rssi\":-88,\"auth\":\"WIFI_AUTH_OPEN\",\"channel\":1},{\"ssid\":\"BEACONET-DEVICES\",\"rssi\":-88,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":1}]}", HTTPD_RESP_USE_STRLEN);
-        err = httpd_resp_send(req, wifiSSIDJSON, HTTPD_RESP_USE_STRLEN);
+        httpd_resp_send(req, wifiSSIDJSON, HTTPD_RESP_USE_STRLEN);
     }
     else
     {
         ESP_LOGE(TAG WIFI_TAG, "Empty Network JSON detected");
     }
-    ESP_LOGW(TAG WIFI_TAG, "err: %d %s---------------------------------------------------------------------", err, esp_err_to_name(err));
-    free(wifiSSIDJSON);
+    
+    if(wifiSSIDJSON)
+    {
+        free(wifiSSIDJSON);
+    }
     return ESP_OK;
 }
 

@@ -102,7 +102,7 @@ typedef struct {
 extern TaskHandle_t xWifiScanTaskHandle;
 extern const char* wifiSSIDJSON; 
 extern bool scanInProgress;
-extern bool scanfinsihed;
+extern bool scanFinished;
 
 
 void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);

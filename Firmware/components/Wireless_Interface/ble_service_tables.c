@@ -2,7 +2,6 @@
 #include "esp_gatt_common_api.h"
 
 
-
 // External UUID declarations (from ble.c)
 extern const uint8_t prov_service_uuid[16];
 extern const uint8_t wifi_rx_uuid[16];

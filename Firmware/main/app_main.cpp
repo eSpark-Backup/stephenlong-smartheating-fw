@@ -1,4 +1,3 @@
-
 #include <string.h>
 #include <esp_wifi.h>
 #include <esp_event.h>
@@ -354,8 +353,8 @@ void execute_command(void)
     }
     case SET_RELAY_STATE:{
         ESP_LOGI(DEVICE_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
-        esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
-        send_ble_notification(err, NULL, 0, NOTIFY_RESPONSE);
+        // esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
+        send_ble_notification(set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]), NULL, 0, NOTIFY_RESPONSE);
         break;
     }
     case CONTROL_SENSOR_BOARD:{
@@ -589,11 +588,13 @@ void execute_command(void)
     }
 
     case WIFI_SCAN:{
-        if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
+        if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 1024*6, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
         {
-            ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
-            break;
+            ESP_LOGE(TAG, "Failed to create wifi_scan_task task");
+            xWifiScanTaskHandle = NULL;
+            send_ble_notification(ESP_FAIL, NULL, 0, NOTIFY_RESPONSE);
         }
+        break;
     }
 
     default:
@@ -601,6 +602,7 @@ void execute_command(void)
         send_ble_notification(ESP_FAIL, NULL, 0, NOTIFY_RESPONSE);
         break;
     }
+
     free(bleParameters[0]);
     free(bleParameters[1]);
     bleParameters[0] = NULL;
@@ -761,7 +763,7 @@ void button_task(void * pvParameters)
                 esp_wifi_start();
                 esp_wifi_connect();
                 set_led_status_flag("pairing_mode_active", false);
-                set_heater_mode(get_device_mode());
+                set_heater_mode(get_device_mode());         // This will restore the device mode
                 bleAdvertMode=false;
             }
             else if((esp_timer_get_time() - soft_AP_start_time) >= SOFT_AP_TIMEOUT && softAPOngoing)
@@ -950,16 +952,16 @@ extern "C" void app_main(void)
     esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
 
 
-    // status_led_init();
+    status_led_init();
     device_data_init();
-    // energy_data_init();
-    // button_init();
+    energy_data_init();
+    button_init();
 
-    // // Initialize sensors after power is applied to sensor board
-    // sensor_board_init();
-    // LD2410_init();
-    // ir_sensor_init();
-    // heater_interface_init();
+    // Initialize sensors after power is applied to sensor board
+    sensor_board_init();
+    LD2410_init();
+    ir_sensor_init();
+    heater_interface_init();
 
    
     // set_heater_temp(27.5);
@@ -967,29 +969,29 @@ extern "C" void app_main(void)
     
     comm_init();
 
-    // // Create WiFi monitoring task for BLE auto-streaming
-    // if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
-    // {
-    //     ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
-    // }
-    // else
-    // {
-    //     ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
-    // }
+    // Create WiFi monitoring task for BLE auto-streaming
+    if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
+    {
+        ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
+    }
+    else
+    {
+        ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
+    }
     
-    // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
-    // {
-    //     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+    if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
+    {
+        ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
         wifi_init_sta(device_data.ssid, device_data.password);
-    //     vTaskDelay(pdMS_TO_TICKS(500)); 
-    //     // thingsBoard_init();
-    // }
-    // else
-    // {
-    //     ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
-    //     start_softap_provisioning();
-    //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
-    // }
+        vTaskDelay(pdMS_TO_TICKS(500)); 
+        thingsBoard_init();
+    }
+    else
+    {
+        ESP_LOGI(DEVICE_TAG, "Starting SoftAP for provisioning");
+        start_softap_provisioning();
+        ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
+    }
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)
