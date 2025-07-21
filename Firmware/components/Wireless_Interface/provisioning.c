@@ -38,11 +38,11 @@ void stop_softap_provisioning(void)
     
     // Validate saved credentials before attempting connection
     if (strlen(device_data.ssid) == 0 || strlen(device_data.password) == 0) {
-        ESP_LOGE(DEVICE_TAG, "Invalid saved WiFi credentials - SSID or password is empty");
+        ESP_LOGE(TAG, "Invalid saved WiFi credentials - SSID or password is empty");
         return;
     }
     
-    ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
+    ESP_LOGI(TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
     wifi_init_sta(device_data.ssid, device_data.password);
     set_led_effect(LED_EFFECT_STEADY, GREEN ,NO_SPEED );
     // set_device_status(0, PAIRING);
@@ -236,7 +236,7 @@ esp_err_t scan_results_handler(httpd_req_t *req)
     // char *json = create_wifi_scan_json(filteredNetworks, filteredNetworksCount);
     if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
     {
-        ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
+        ESP_LOGE(TAG WIFI_TAG, "Failed to create wifi_scan_task  task");
         return ESP_FAIL;
     } 
     vTaskDelay(pdMS_TO_TICKS(500)); // Delay for 1 second
@@ -320,7 +320,7 @@ void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_e
                 prepare_write_env->prepare_len = 0;
                 if (prepare_write_env->prepare_buf == NULL)
                 {
-                    ESP_LOGE(GATTS_TAG, "Gatt_server prep no mem\n");
+                    ESP_LOGE(TAG GATTS_TAG, "Gatt_server prep no mem\n");
                     status = ESP_GATT_NO_RESOURCES;
                 }
             }
@@ -345,7 +345,7 @@ void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_e
             esp_err_t response_err = esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, status, gatt_rsp);
             if (response_err != ESP_OK)
             {
-                ESP_LOGE(GATTS_TAG, "Send response error\n");
+                ESP_LOGE(TAG GATTS_TAG, "Send response error\n");
             }
             free(gatt_rsp);
             if (status != ESP_GATT_OK)
@@ -367,12 +367,12 @@ void write_event_env(esp_gatt_if_t gatts_if, prepare_type_env_t *prepare_write_e
         {
             if ( param->write.handle == herschel_handle_table[IDX_CONTROL_POINT_VAL])
             {
-                ESP_LOGD(GATTS_TAG, "calling 'uart'");
+                ESP_LOGD(TAG GATTS_TAG, "calling 'uart'");
                 parse_command( param->write.value, param->write.len , "uart");
             }
             else if ( param->write.handle == wifi_handle_table[IDX_WIFI_RX_VAL])
             {
-                ESP_LOGD(GATTS_TAG, "calling 'wifi'");
+                ESP_LOGD(TAG GATTS_TAG, "calling 'wifi'");
                 parse_command( param->write.value, param->write.len , "wifi");
             }
         }
@@ -385,18 +385,18 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
     {
         if ( temp_char_handle == herschel_handle_table[IDX_CONTROL_POINT_VAL])
         {
-            ESP_LOGD(GATTS_TAG, "calling 'ble'");
+            ESP_LOGD(TAG GATTS_TAG, "calling 'ble'");
             parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "ble");
         }
         else if ( temp_char_handle == wifi_handle_table[IDX_WIFI_RX_VAL])
         {
-            ESP_LOGD(GATTS_TAG, "calling 'wifi'");
+            ESP_LOGD(TAG GATTS_TAG, "calling 'wifi'");
             parse_command( prepare_write_env->prepare_buf, prepare_write_env->prepare_len , "wifi");
         }
     }
     else
     {
-        ESP_LOGI(GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
+        ESP_LOGI(TAG GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
     }
     if (prepare_write_env->prepare_buf)
     {
@@ -416,7 +416,7 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
 //     }
 //     else
 //     {
-//         ESP_LOGI(GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
+//         ESP_LOGI(TAG GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
 //     }
 //     if (prepare_write_env->prepare_buf)
 //     {
@@ -432,13 +432,13 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
     memcpy(json_str, data, len);
     json_str[len] = '\0'; // Ensure null termination
 
-    ESP_LOGI(GATTS_TAG, "Received WiFi JSON: %s", json_str);
+    ESP_LOGI(TAG GATTS_TAG, "Received WiFi JSON: %s", json_str);
 
     // Parse JSON
     cJSON *json = cJSON_Parse(json_str);
     if (json == NULL)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to parse WiFi credentials JSON");
+        ESP_LOGE(TAG GATTS_TAG, "Failed to parse WiFi credentials JSON");
         send_wifi_status_json("failed", NULL, "Invalid JSON format");
         return;
     }
@@ -450,7 +450,7 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
     // Validate SSID
     if (!ssid_item || !cJSON_IsString(ssid_item) || ssid_item->valuestring == NULL)
     {
-        ESP_LOGE(GATTS_TAG, "Missing or invalid SSID in JSON");
+        ESP_LOGE(TAG GATTS_TAG, "Missing or invalid SSID in JSON");
         send_wifi_status_json("failed", NULL, "Missing SSID");
         cJSON_Delete(json);
         return;
@@ -459,7 +459,7 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
     // Validate password
     if (!password_item || !cJSON_IsString(password_item) || password_item->valuestring == NULL)
     {
-        ESP_LOGE(GATTS_TAG, "Missing or invalid password in JSON");
+        ESP_LOGE(TAG GATTS_TAG, "Missing or invalid password in JSON");
         send_wifi_status_json("failed", NULL, "Missing password");
         cJSON_Delete(json);
         return;
@@ -468,7 +468,7 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
     // Check SSID and password length limits
     if (strlen(ssid_item->valuestring) > WIFI_SSID_MAX_LEN - 1)
     {
-        ESP_LOGE(GATTS_TAG, "SSID too long: %d characters (max %d)", strlen(ssid_item->valuestring), WIFI_SSID_MAX_LEN - 1);
+        ESP_LOGE(TAG GATTS_TAG, "SSID too long: %d characters (max %d)", strlen(ssid_item->valuestring), WIFI_SSID_MAX_LEN - 1);
         send_wifi_status_json("failed", NULL, "SSID too long");
         cJSON_Delete(json);
         return;
@@ -476,13 +476,13 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
 
     if (strlen(password_item->valuestring) > WIFI_PASS_MAX_LEN - 1)
     {
-        ESP_LOGE(GATTS_TAG, "Password too long: %d characters (max %d)", strlen(password_item->valuestring), WIFI_PASS_MAX_LEN - 1);
+        ESP_LOGE(TAG GATTS_TAG, "Password too long: %d characters (max %d)", strlen(password_item->valuestring), WIFI_PASS_MAX_LEN - 1);
         send_wifi_status_json("failed", NULL, "Password too long");
         cJSON_Delete(json);
         return;
     }
 
-    ESP_LOGI(GATTS_TAG, "WiFi Credentials - SSID: %s", ssid_item->valuestring);
+    ESP_LOGI(TAG GATTS_TAG, "WiFi Credentials - SSID: %s", ssid_item->valuestring);
 
     // Save credentials and attempt connection
     save_wifi_credentials(ssid_item->valuestring, password_item->valuestring);
@@ -492,7 +492,7 @@ void parse_wifi_json_credentials(uint8_t *data, int len)
 
     // Double-check credentials before calling wifi_init_sta
     if (ssid_item->valuestring == NULL || password_item->valuestring == NULL) {
-        ESP_LOGE(GATTS_TAG, "SSID or password valuestring is NULL after validation");
+        ESP_LOGE(TAG GATTS_TAG, "SSID or password valuestring is NULL after validation");
         send_wifi_status_json("failed", NULL, "Internal error");
         cJSON_Delete(json);
         return;
@@ -517,7 +517,7 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
     cJSON *json = cJSON_CreateObject();
     if (json == NULL)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to create WiFi status JSON object");
+        ESP_LOGE(TAG GATTS_TAG, "Failed to create WiFi status JSON object");
         return;
     }
 
@@ -525,7 +525,7 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
     cJSON *status_item = cJSON_CreateString(status);
     if (status_item == NULL || !cJSON_AddItemToObject(json, "status", status_item))
     {
-        ESP_LOGE(GATTS_TAG, "Failed to add status to WiFi JSON");
+        ESP_LOGE(TAG GATTS_TAG, "Failed to add status to WiFi JSON");
         cJSON_Delete(json);
         return;
     }
@@ -570,12 +570,12 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
     char *json_string = cJSON_Print(json);
     if (json_string == NULL)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to convert WiFi status to JSON string");
+        ESP_LOGE(TAG GATTS_TAG, "Failed to convert WiFi status to JSON string");
         cJSON_Delete(json);
         return;
     }
 
-    ESP_LOGI(GATTS_TAG, "Sending WiFi status JSON: %s", json_string);
+    ESP_LOGI(TAG GATTS_TAG, "Sending WiFi status JSON: %s", json_string);
 
     // Send via BLE notification on WiFi provisioning service
     esp_err_t err = esp_ble_gatts_send_indicate(gl_profile_tab[PROFILE_PROV_APP_ID].gatts_if,
@@ -584,7 +584,7 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
                                                 strlen(json_string), (uint8_t*)json_string, false);
     if (err != ESP_OK)
     {
-        ESP_LOGE(GATTS_TAG, "Failed to send WiFi status JSON notification: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG GATTS_TAG, "Failed to send WiFi status JSON notification: %s", esp_err_to_name(err));
     }
 
     // Clean up

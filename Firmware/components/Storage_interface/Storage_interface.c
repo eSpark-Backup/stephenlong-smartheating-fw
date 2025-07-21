@@ -197,7 +197,7 @@ esp_err_t get_device_thingsboard_credentials(char *token)
     }
 
     size_t length = CREDENTIAL_VALUE;
-    nvs_get_str(nvs, NVS_KEY_THINGSBOARD_TOKEN, token, &length);
+    nvs_get_str(nvs, NVS_KEY_ACCESS_TOKEN, token, &length);
     nvs_close(nvs);
 
     ESP_LOGW(TAG, "HTTPS Provisioning Token loaded: %s", token);
@@ -214,7 +214,7 @@ esp_err_t save_device_thingsboard_credentials(const char *token)
         return err;
     }
 
-    nvs_set_str(nvs, NVS_KEY_THINGSBOARD_TOKEN, token);
+    nvs_set_str(nvs, NVS_KEY_ACCESS_TOKEN, token);
     nvs_commit(nvs);
     nvs_close(nvs);
     ESP_LOGI(TAG HTTPS_TAG, "HTTPS Provisioning Token saved");
@@ -380,4 +380,42 @@ void update_presence_detection_time(bool presence_detected)
     if (presence_detected) {
         last_presence_detected_time = US_TO_MS(esp_timer_get_time());
     }
+}
+
+esp_err_t load_wifi_credentials(char *ssid, char *password)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READONLY, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG WIFI_TAG, "No saved credentials found");
+#ifdef DEVICE_TEST
+        save_wifi_credentials(TEST_AP_SSID, TEST_AP_PASS);
+#endif
+        return err;
+    }
+
+    size_t ssid_len = WIFI_SSID_MAX_LEN, pass_len = WIFI_PASS_MAX_LEN;
+    nvs_get_str(nvs, "ssid", ssid, &ssid_len);
+    nvs_get_str(nvs, "password", password, &pass_len);
+    nvs_close(nvs);
+    return ESP_OK;
+}
+
+esp_err_t save_wifi_credentials(const char *ssid, const char *password)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READWRITE, &nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG WIFI_TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    nvs_set_str(nvs, "ssid", ssid);
+    nvs_set_str(nvs, "password", password);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    ESP_LOGI(TAG WIFI_TAG, "WiFi credentials saved");
+    return ESP_OK;
 }

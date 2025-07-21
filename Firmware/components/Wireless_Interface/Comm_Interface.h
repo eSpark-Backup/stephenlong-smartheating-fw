@@ -18,17 +18,21 @@
 #include <lwip/sys.h>
 #include "cJSON.h"
 
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
-
-
 #define adv_config_flag (1 << 0)
 #define scan_rsp_config_flag (1 << 1)
+
+enum {
+    NOTIFY_WIFI,
+    NOTIFY_CONTROL,
+    NOTIFY_RESPONSE,
+    NOTIFY_TEMPERATURE,
+    NOTIFY_PRESENCE,
+    NOTIFY_MAX
+};
 
 extern uint8_t adv_config_done;
 
@@ -111,13 +115,13 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
 // void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param);
 
 uint8_t parse_command(uint8_t *data, int len , const char *property);
-void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len);
+esp_err_t send_ble_notification(esp_err_t status, uint8_t *data, uint16_t len, uint8_t notify_enum);
 void send_ble_temperature_notification(float ambient_temp, float object_temp);
 void send_ble_presence_notification(uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
-void send_temperature_stream_notification(uint32_t timestamp, float ambient_temp, float object_temp);
-esp_err_t send_wifi_ssid_JSON_notification(const char* wifiSSIDJSON);
-void send_presence_stream_notification(uint32_t timestamp, uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
-void send_wifi_status_notification(const char *json_status);
+// void send_temperature_stream_notification(uint32_t timestamp, float ambient_temp, float object_temp);
+// esp_err_t send_wifi_ssid_JSON_notification(const char* wifiSSIDJSON);
+// void send_presence_stream_notification(uint32_t timestamp, uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
+// void send_wifi_status_notification(const char *json_status);
 
 // Client State Management Functions (auto-streaming enabled)
 void update_cccd_state(uint16_t conn_id, uint16_t handle, uint16_t value);
@@ -131,8 +135,6 @@ void send_wifi_status_json(const char *status, const char *ssid, const char *err
 
 // WiFi
 void wifi_init_sta(const char *ssid, const char *password);
-esp_err_t load_wifi_credentials(char *ssid, char *password);
-esp_err_t save_wifi_credentials(const char *ssid, const char *password);
 esp_err_t get_wifi_status(char *ssid_out, uint8_t *connected_out, int8_t *rssi_out, uint32_t *ip_address_out, uint8_t *internet_available_out);
 esp_err_t scan_wifi_ssids();
 void wifi_scan_task(void *pvParameters);

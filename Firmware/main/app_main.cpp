@@ -215,18 +215,18 @@ void execute_command(void)
     {
     case POWER_CONTROL:
         ESP_LOGW(DEVICE_TAG, "Power control/reboot command...");
-        send_ble_uart_notification(ESP_OK, NULL, 0);
+        send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         esp_restart();
         break;
     case FACTORY_RESET:
         ESP_LOGW(DEVICE_TAG, "Performing application reset...");
-        send_ble_uart_notification(reset_device_and_erase_nvs(), NULL, 0);
+        send_ble_notification(reset_device_and_erase_nvs(), NULL, 0, NOTIFY_RESPONSE);
         esp_restart();
         break;
     case READ_INTERNAL_TEMP:{
         ESP_LOGI(DEVICE_TAG, "Reading internal temperature...");
         float tempInternal = get_internal_temp();
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&tempInternal, sizeof(tempInternal));
+        send_ble_notification(ESP_OK, (uint8_t*)&tempInternal, sizeof(tempInternal), NOTIFY_RESPONSE);
         break;
     }
     case READ_IR_TEMPERATURES:{
@@ -242,7 +242,7 @@ void execute_command(void)
         temp_data.object = get_object_temp();
         temp_data.operative = get_operative_temp(); // Use adaptive calculation consistent with heating control
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&temp_data, sizeof(temp_data));
+        send_ble_notification(ESP_OK, (uint8_t*)&temp_data, sizeof(temp_data), NOTIFY_RESPONSE);
         break;
     }
     case SET_TARGET_TEMP:{
@@ -258,34 +258,34 @@ void execute_command(void)
             // Special value min-2: Set auto mode (restore trigger)
             ESP_LOGI(DEVICE_TAG, "Restore trigger received (%.1f)", targetTemp);
             set_device_mode(AUTO_MODE);
-            send_ble_uart_notification(ESP_OK, NULL, 0);
+            send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         }
         else if (targetTemp == manualOffTrigger) {
             // Special value min-1: Set manual mode + heater off (off trigger)
             ESP_LOGI(DEVICE_TAG, "Off trigger received (%.1f)", targetTemp);
             set_device_mode(MANUAL_MODE);
             set_heater_state(HEATER_OFF);
-            send_ble_uart_notification(ESP_OK, NULL, 0);
+            send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         }
         else if (targetTemp == manualHighTrigger) {
             // Special value max+1: Set manual mode + heater high (boost trigger)
             ESP_LOGI(DEVICE_TAG, "Boost trigger received (%.1f)", targetTemp);
             set_device_mode(MANUAL_MODE);
             set_heater_state(HEATER_HIGH);
-            send_ble_uart_notification(ESP_OK, NULL, 0);
+            send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         }
         else if (targetTemp >= UI_MIN_TEMP_CELSIUS && targetTemp <= UI_MAX_TEMP_CELSIUS) {
             // Normal temperature range: Store temperature normally
             ESP_LOGI(DEVICE_TAG, "Setting target temperature to %.1f", targetTemp);
             set_heater_temp(targetTemp);
-            send_ble_uart_notification(ESP_OK, NULL, 0);
+            send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         }
         else {
             // Invalid temperature range: Send error response
             ESP_LOGE(DEVICE_TAG, "Invalid temperature %.1f (valid range: %.0f-%.0f°C, triggers: %.0f/%.0f/%.0f)", 
                      targetTemp, UI_MIN_TEMP_CELSIUS, UI_MAX_TEMP_CELSIUS, 
                      autoModeTrigger, manualOffTrigger, manualHighTrigger);
-            send_ble_uart_notification(ESP_FAIL, NULL, 0);
+            send_ble_notification(ESP_FAIL, NULL, 0, NOTIFY_RESPONSE);
         }
         break;
     }
@@ -319,19 +319,19 @@ void execute_command(void)
             ESP_LOGI(DEVICE_TAG, "Auto mode - returning stored temp (%.1f)", responseTemp);
         }
         
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&responseTemp, sizeof(responseTemp));
+        send_ble_notification(ESP_OK, (uint8_t*)&responseTemp, sizeof(responseTemp), NOTIFY_RESPONSE);
         break;
     }
     case SET_OPERATING_MODE:{
         ESP_LOGI(DEVICE_TAG, "Setting operating mode to %d", *(uint8_t*)bleParameters[0]);
         set_heater_mode((DEVICE_MODE)*(uint8_t*)bleParameters[0]);
-        send_ble_uart_notification(ESP_OK, NULL, 0);
+        send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         break;
     }
     case GET_OPERATING_MODE:{
         ESP_LOGI(DEVICE_TAG, "Getting operating mode...");
         DEVICE_MODE mode = get_device_mode();
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&mode, sizeof(mode));
+        send_ble_notification(ESP_OK, (uint8_t*)&mode, sizeof(mode), NOTIFY_RESPONSE);
         break;
     }
     case READ_RELAY_STATE:{
@@ -349,20 +349,20 @@ void execute_command(void)
         relay_data.high_relay = gpio_get_level((gpio_num_t)HEATER_HIGH_IO);
         relay_data.power_consumption = 0.0f; // Placeholder
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&relay_data, sizeof(relay_data));
+        send_ble_notification(ESP_OK, (uint8_t*)&relay_data, sizeof(relay_data), NOTIFY_RESPONSE);
         break;
     }
     case SET_RELAY_STATE:{
         ESP_LOGI(DEVICE_TAG, "Setting relay state to %d", *(uint8_t*)bleParameters[0]);
         esp_err_t err = set_heater_state((HEATER_STATE)*(uint8_t*)bleParameters[0]);
-        send_ble_uart_notification(err, NULL, 0);
+        send_ble_notification(err, NULL, 0, NOTIFY_RESPONSE);
         break;
     }
     case CONTROL_SENSOR_BOARD:{
         ESP_LOGI(DEVICE_TAG, "Controlling sensor board power: %d", *(uint8_t*)bleParameters[0]);
         uint8_t enable = *(uint8_t*)bleParameters[0];
         gpio_set_level((gpio_num_t)GND_SW, enable ? 1 : 0);
-        send_ble_uart_notification(ESP_OK, NULL, 0);
+        send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         break;
     }
     case READ_PRESENCE_DATA:{
@@ -396,7 +396,7 @@ void execute_command(void)
                  presence_data.presence_detected, presence_data.moving_distance, presence_data.moving_energy,
                  presence_data.stationary_distance, presence_data.stationary_energy);
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&presence_data, sizeof(presence_data));
+        send_ble_notification(ESP_OK, (uint8_t*)&presence_data, sizeof(presence_data), NOTIFY_RESPONSE);
         break;
     }
     case READ_WIFI_STATUS:{
@@ -434,7 +434,7 @@ void execute_command(void)
                  wifi_status.wifi_connected, wifi_status.ssid, wifi_status.rssi,
                  IP2STR((esp_ip4_addr_t*)&wifi_status.ip_address), wifi_status.internet_available);
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&wifi_status, sizeof(wifi_status));
+        send_ble_notification(ESP_OK, (uint8_t*)&wifi_status, sizeof(wifi_status), NOTIFY_RESPONSE);
         break;
     }
     case READ_SYSTEM_DIAGNOSTICS:{
@@ -461,7 +461,7 @@ void execute_command(void)
         diagnostics.min_free_heap = esp_get_minimum_free_heap_size();
         diagnostics.cpu_usage = 0; // Placeholder
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&diagnostics, sizeof(diagnostics));
+        send_ble_notification(ESP_OK, (uint8_t*)&diagnostics, sizeof(diagnostics), NOTIFY_RESPONSE);
         break;
     }
     case READ_ENERGY_METRICS:{
@@ -486,7 +486,7 @@ void execute_command(void)
                  ble_energy_data.heating_time_seconds,
                  ble_energy_data.efficiency_percent);
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&ble_energy_data, sizeof(ble_energy_data));
+        send_ble_notification(ESP_OK, (uint8_t*)&ble_energy_data, sizeof(ble_energy_data), NOTIFY_RESPONSE);
         break;
     }
     case CONTROL_FRONT_LED:{
@@ -549,7 +549,7 @@ void execute_command(void)
 
                 default: // Invalid mode
                     ESP_LOGW(DEVICE_TAG, "Invalid LED mode: %d", led_mode);
-                    send_ble_uart_notification(ESP_ERR_INVALID_ARG, NULL, 0);
+                    send_ble_notification(ESP_ERR_INVALID_ARG, NULL, 0, NOTIFY_RESPONSE);
                     return;
             }
         } else {
@@ -557,7 +557,7 @@ void execute_command(void)
         }
 
         // Acknowledge successful command
-        send_ble_uart_notification(ESP_OK, NULL, 0);
+        send_ble_notification(ESP_OK, NULL, 0, NOTIFY_RESPONSE);
         break;
     }
     case READ_DEVICE_INFO:{
@@ -584,13 +584,13 @@ void execute_command(void)
         esp_read_mac(device_info.mac_address, ESP_MAC_WIFI_STA);
         device_info.serial_number = 0x000001; // Placeholder
 
-        send_ble_uart_notification(ESP_OK, (uint8_t*)&device_info, sizeof(device_info));
+        send_ble_notification(ESP_OK, (uint8_t*)&device_info, sizeof(device_info), NOTIFY_RESPONSE);
         break;
     }
 
     default:
         ESP_LOGE(DEVICE_TAG, "Invalid command received: %X", blecmd);
-        send_ble_uart_notification(ESP_FAIL, NULL, 0);
+        send_ble_notification(ESP_FAIL, NULL, 0, NOTIFY_RESPONSE);
         break;
     }
     free(bleParameters[0]);
@@ -912,20 +912,23 @@ static void wifi_monitoring_task(void *pvParameters)
                 }
 
                 // Send WiFi status notification
-                send_wifi_status_notification(json_status);
+                send_ble_notification(ESP_OK, (uint8_t*)json_status, strlen(json_status), NOTIFY_WIFI);
                 last_wifi_notification_time = current_time;
-
+                
                 ESP_LOGD(DEVICE_TAG, "WiFi status notification sent (interval: %ds, presence: %s, recent_connection: %s): %s", 
-                        wifi_interval, presence_detected ? "yes" : "no",
-                        has_recently_connected_ble_clients() ? "yes" : "no", json_status);
-            } else {
-                // Send error status
-                send_wifi_status_notification("{\"status\":\"error\",\"error\":\"Failed to read WiFi status\"}");
-                last_wifi_notification_time = current_time;
-                ESP_LOGW(DEVICE_TAG, "Failed to get WiFi status: %s", esp_err_to_name(status_err));
+                    wifi_interval, presence_detected ? "yes" : "no",
+                    has_recently_connected_ble_clients() ? "yes" : "no", json_status);
+                } else {
+                    char json_status[256]; 
+                    snprintf(json_status, sizeof(json_status),
+                    "{\"status\":\"error\",\"error\":\"Failed to read WiFi status\"}");
+                    // Send error status
+                    send_ble_notification(ESP_OK, (uint8_t*)json_status, strlen(json_status), NOTIFY_WIFI);
+                    last_wifi_notification_time = current_time;
+                    ESP_LOGW(DEVICE_TAG, "Failed to get WiFi status: %s", esp_err_to_name(status_err));
+                }
             }
         }
-    }
 
     vTaskDelete(NULL);
 }
@@ -939,33 +942,34 @@ extern "C" void app_main(void)
     esp_log_level_set("event", ESP_LOG_WARN);       // Hide "no handlers registered" messages
 
 
-    status_led_init();
+    // status_led_init();
     device_data_init();
-    energy_data_init();
-    button_init();
+    // energy_data_init();
+    // button_init();
 
-    // Initialize sensors after power is applied to sensor board
-    sensor_board_init();
-    LD2410_init();
-    ir_sensor_init();
-    heater_interface_init();
+    // // Initialize sensors after power is applied to sensor board
+    // sensor_board_init();
+    // LD2410_init();
+    // ir_sensor_init();
+    // heater_interface_init();
 
    
-    // set_heater_temp(27.5);
-    // set_heater_mode(AUTO_MODE);
+    // // set_heater_temp(27.5);
+    // // set_heater_mode(AUTO_MODE);
     
-    // comm_init();
+    comm_init();
+    wifi_init_sta(device_data.ssid, device_data.password);
    
     
-    // // Create WiFi monitoring task for BLE auto-streaming
-    // if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
-    // {
-    //     ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
-    // }
-    // else
-    // {
-    //     ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
-    // }
+    // Create WiFi monitoring task for BLE auto-streaming
+    if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
+    {
+        ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
+    }
+    else
+    {
+        ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
+    }
     
     // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
     // {

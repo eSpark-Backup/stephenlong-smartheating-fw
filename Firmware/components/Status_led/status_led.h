@@ -53,13 +53,12 @@ typedef struct {
 // Creatign flag bitfield
 typedef struct
 {
-    uint16_t erase_nvs                      :1;
-
     // Critical errors (highest priority - RED)
     uint16_t error_critical                 :1;                              // LSB?
     uint16_t error_ir_sensor                :1;
     uint16_t error_heating                  :1;
     uint16_t error_nvs                      :1;
+    uint16_t erase_nvs                      :1;
 
     // Button feedback (high priority - various colors)
     uint16_t button_ble_feedback            :1;

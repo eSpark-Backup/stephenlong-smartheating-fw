@@ -43,6 +43,10 @@ int calculate_telemetry_interval_seconds(bool presence_detected);
 void update_presence_detection_time(bool presence_detected);
 bool get_presence_detected(void);  // C-compatible wrapper for LD2410_getPresenceDetected()
 
+//---------------------------------
+esp_err_t load_wifi_credentials(char *ssid, char *password);
+esp_err_t save_wifi_credentials(const char *ssid, const char *password);
+
 #ifdef __cplusplus
 }
 #endif

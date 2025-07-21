@@ -149,11 +149,11 @@ extern "C" {
 #define NVS_KEY_SSID                    "ssid"
 #define NVS_KEY_PASSWORD                "password"
 #define NVS_NAMESPACE_DEVICE_HTTPS_DATA "https_dev_data"
-#define NVS_KEY_THINGSBOARD_TOKEN       "token"
-#define NVS_KEY_LAST_UPDATE_TIME        "last_update"
+#define NVS_KEY_ACCESS_TOKEN            "access_token"
 #define NVS_NAMESPACE_ENERGYDATA        "energy_data"
 #define NVS_KEY_ENERGY_CONSUMED         "energy_kwh"
 #define NVS_KEY_HEATING_TIME            "heating_time"
+#define NVS_KEY_LAST_UPDATE_TIME        "last_update"
 
 // Energy measurement constants - HC-1200-VP Configuration
 #define HEATING_LOW_WATTS              500.0f         // Watts for edge element (lower power)
