@@ -958,18 +958,17 @@ extern "C" void app_main(void)
     // // set_heater_mode(AUTO_MODE);
     
     comm_init();
-    wifi_init_sta(device_data.ssid, device_data.password);
    
     
-    // Create WiFi monitoring task for BLE auto-streaming
-    if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
-    {
-        ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
-    }
-    else
-    {
-        ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
-    }
+    // // Create WiFi monitoring task for BLE auto-streaming
+    // if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
+    // {
+    //     ESP_LOGE(DEVICE_TAG, "Failed to create WiFi monitoring task");
+    // }
+    // else
+    // {
+    //     ESP_LOGI(DEVICE_TAG, "WiFi monitoring task created successfully");
+    // }
     
     // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
     // {
@@ -984,6 +983,7 @@ extern "C" void app_main(void)
     //     start_softap_provisioning();
     //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
     // }
+    start_softap_provisioning();
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)

@@ -6,6 +6,9 @@
 
 #define TAG "PROVISION_MANAGER"
 
+extern const uint8_t portal_html[] asm("_binary_herschel_portal_html_start");
+extern const uint8_t portal_html_end[] asm("_binary_herschel_portal_html_end");
+
 uint16_t temp_char_handle = 0;
 httpd_handle_t server = NULL;
 
@@ -56,6 +59,7 @@ httpd_handle_t start_webserver(void)
         httpd_uri_t uri_get = {.uri = "/", .method = HTTP_GET, .handler = get_handler};
         httpd_uri_t uri_post = {.uri = "/set", .method = HTTP_POST, .handler = post_handler};
         httpd_uri_t uri_scan_results = {.uri = "/scan_results", .method = HTTP_GET, .handler = scan_results_handler};
+        ESP_LOGI(TAG WIFI_TAG, "HTTP Server sent");
         httpd_register_uri_handler(server, &uri_get);
         httpd_register_uri_handler(server, &uri_post);
         httpd_register_uri_handler(server, &uri_scan_results);
@@ -127,112 +131,15 @@ esp_err_t post_handler(httpd_req_t *req)
 
 esp_err_t get_handler(httpd_req_t *req)
 {
-const char *html =
-"<!DOCTYPE html>"
-"<html lang='en'>"
-"<head>"
-"<meta charset='UTF-8'>"
-"<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-"<title>HERSCHEL PORTAL</title>"
-"<style>"
-"body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f8; color: #333; padding: 20px; }"
-"h1 { text-align: center; color: #2c3e50; }"
-"form, .networks { max-width: 400px; margin: 20px auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }"
-"label { display: block; margin-bottom: 8px; font-weight: bold; }"
-"input[type='text'], input[type='password'] { width: 100%; padding: 10px; margin-bottom: 16px; border: 1px solid #ccc; border-radius: 4px; }"
-"input[type='submit'], button { width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }"
-"input[type='submit']:hover, button:hover { background-color: #2980b9; }"
-"ul { list-style: none; padding: 0; }"
-"li { padding: 10px; display: flex; flex-direction: column; border-bottom: 1px solid #eee; cursor: pointer; }"
-"li:hover { background-color: #f1f1f1; }"
-".top { display: flex; justify-content: space-between; align-items: center; }"
-".signal-icon { font-size: 20px; margin-left: 10px; }"
-".locked { color: #e74c3c; margin-left: 5px; }"
-".details { font-size: 12px; color: #777; margin-top: 4px; }"
-"#loader { text-align: center; margin-top: 20px; }"
-".spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }"
-"@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }"
-"</style>"
-"</head>"
-"<body>"
-
-"<h1>HERSCHEL PORTAL</h1>"
-
-"<form action='/set' method='POST'>"
-"<label for='ssid'>WiFi SSID:</label>"
-"<input type='text' name='ssid' id='ssid' required>"
-"<label for='password'>WiFi Password:</label>"
-"<input type='password' name='password' id='password'>"
-"<input type='submit' value='Connect'>"
-"</form>"
-
-"<div class='networks'>"
-"<button onclick='loadNetworks()'>🔍 Scan for Available Networks</button>"
-"<div id='networks'><div id='loader' style='display:none;'><div class='spinner'></div><p>Scanning...</p></div></div>"
-"</div>"
-
-"<script>"
-"function getSignalIcon(rssi) {"
-"  if (rssi >= -50) return '📶📶📶📶';"
-"  else if (rssi >= -60) return '📶📶📶';"
-"  else if (rssi >= -70) return '📶📶';"
-"  else if (rssi >= -80) return '📶';"
-"  else return '📶❌';"
-"}"
-
-"function getSignalQualityLabel(rssi) {"
-"  if (rssi >= -50) return 'Very High';"
-"  else if (rssi >= -60) return 'High';"
-"  else if (rssi >= -70) return 'Medium';"
-"  else if (rssi >= -80) return 'Low';"
-"  else return 'Very Low';"
-"}"
-
-"function loadNetworks() {"
-"  const networksDiv = document.getElementById('networks');"
-"  networksDiv.innerHTML = `<div id='loader'><div class='spinner'></div><p>Scanning...</p></div>`;"
-"  fetch('/scan_results')"
-"    .then(response => response.json())"
-"    .then(data => {"
-"      let html = '<ul>';"
-"      data.networks.forEach(n => {"
-"        const icon = getSignalIcon(n.rssi);"
-"        const quality = getSignalQualityLabel(n.rssi);"
-"        const lock = n.auth !== 0 ? '<span class=\\\"locked\\\">🔒</span>' : '';"
-"        html += `<li onclick='fillSSID(\\\"${n.ssid}\\\")'>"
-"          <div class='top'>"
-"            <span>${n.ssid} ${lock}</span>"
-"            <span class='signal-icon'>${icon}</span>"
-"          </div>"
-"          <div class='details'>${quality} Signal</div>"
-"        </li>`;"
-"      });"
-"      html += '</ul>';"
-"      networksDiv.innerHTML = html;"
-"    })"
-"    .catch(err => {"
-"      networksDiv.innerHTML = '<p style=\\\"color:red\\\">Failed to load networks.</p>';"
-"      console.error('Error fetching networks:', err);"
-"    });"
-"}"
-
-"function fillSSID(ssid) {"
-"  document.getElementById('ssid').value = ssid;"
-"  window.scrollTo({ top: 0, behavior: 'smooth' });"
-"}"
-"</script>"
-
-"</body></html>";
-
-
-
-
-    httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
+    const size_t html_len = portal_html_end - portal_html;
+    httpd_resp_send(req, (const char *)portal_html, html_len);
     return ESP_OK;
 }
 
 esp_err_t scan_results_handler(httpd_req_t *req)
 {
+    int err = 0;
+    wifiSSIDJSON = (char *)malloc(1024 * sizeof(char)); // Allocate memory for JSON response
     // char *json = create_wifi_scan_json(filteredNetworks, filteredNetworksCount);
     if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
     {
@@ -246,12 +153,14 @@ esp_err_t scan_results_handler(httpd_req_t *req)
     if(strlen(wifiSSIDJSON) > 0){
         ESP_LOGI(TAG WIFI_TAG, "Sending Network JSON on Portal");
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, wifiSSIDJSON, HTTPD_RESP_USE_STRLEN);
+        // err = httpd_resp_send(req, "{\"action\":\"scan_result\",\"networks\":[{\"ssid\":\"StormFiber-2.4G\",\"rssi\":-62,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":1},{\"ssid\":\"eSpark Wifi\",\"rssi\":-62,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":6},{\"ssid\":\"StormFiber-E290\",\"rssi\":-65,\"auth\":\"WIFI_AUTH_WPA_WPA2_PSK\",\"channel\":11},{\"ssid\":\"Vozye Mash network\",\"rssi\":-86,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":7},{\"ssid\":\"BEACONET-GUEST\",\"rssi\":-87,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":1},{\"ssid\":\"BEACONET-STAFF\",\"rssi\":-88,\"auth\":\"WIFI_AUTH_OPEN\",\"channel\":1},{\"ssid\":\"BEACONET-STUDENT\",\"rssi\":-88,\"auth\":\"WIFI_AUTH_OPEN\",\"channel\":1},{\"ssid\":\"BEACONET-DEVICES\",\"rssi\":-88,\"auth\":\"WIFI_AUTH_WPA2_PSK\",\"channel\":1}]}", HTTPD_RESP_USE_STRLEN);
+        err = httpd_resp_send(req, wifiSSIDJSON, HTTPD_RESP_USE_STRLEN);
     }
     else
     {
         ESP_LOGE(TAG WIFI_TAG, "Empty Network JSON detected");
     }
+    ESP_LOGW(TAG WIFI_TAG, "err: %d %s---------------------------------------------------------------------", err, esp_err_to_name(err));
     free(wifiSSIDJSON);
     return ESP_OK;
 }
@@ -405,26 +314,6 @@ void exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_c
     }
     prepare_write_env->prepare_len = 0;
 }
-
-// void uart_exec_write_event_env(prepare_type_env_t *prepare_write_env, esp_ble_gatts_cb_param_t *param)
-// {
-//     if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC)
-//     {
-//         // parse_ble_write_data(prepare_write_env->prepare_buf, prepare_write_env->prepare_len);
-//         char *cmd_value = parse_JSON( param->write.value, param->write.len , "cmd");
-
-//     }
-//     else
-//     {
-//         ESP_LOGI(TAG GATTS_TAG, "ESP_GATT_PREP_WRITE_CANCEL");
-//     }
-//     if (prepare_write_env->prepare_buf)
-//     {
-//         free(prepare_write_env->prepare_buf);
-//         prepare_write_env->prepare_buf = NULL;
-//     }
-//     prepare_write_env->prepare_len = 0;
-// }
 
 void parse_wifi_json_credentials(uint8_t *data, int len)
 {

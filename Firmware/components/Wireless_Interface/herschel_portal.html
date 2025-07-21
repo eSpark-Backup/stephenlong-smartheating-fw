@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>HERSCHEL PORTAL</title>
+<style>
+body { font-family: 'Segoe UI', sans-serif; background-color: #f4f6f8; color: #333; padding: 20px; }
+h1 { text-align: center; color: #2c3e50; }
+form, .networks { max-width: 400px; margin: 20px auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+label { display: block; margin-bottom: 8px; font-weight: bold; }
+input[type='text'], input[type='password'] { width: 100%; padding: 10px; margin-bottom: 16px; border: 1px solid #ccc; border-radius: 4px; }
+input[type='submit'], button { width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+input[type='submit']:hover, button:hover { background-color: #2980b9; }
+ul { list-style: none; padding: 0; }
+li { padding: 10px; display: flex; flex-direction: column; border-bottom: 1px solid #eee; cursor: pointer; }
+li:hover { background-color: #f1f1f1; }
+.top { display: flex; justify-content: space-between; align-items: center; }
+.signal-icon { font-size: 20px; margin-left: 10px; }
+.locked { color: #e74c3c; margin-left: 5px; }
+.details { font-size: 12px; color: #777; margin-top: 4px; }
+#loader { text-align: center; margin-top: 20px; }
+.spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+.wave {
+	display: inline-block;
+	border: 10px solid transparent;
+	border-top-color: currentColor;
+	border-radius: 50%;
+	border-style: solid;
+	margin: 5px;
+}
+
+.waveStrength-3 .wv4.wave,
+.waveStrength-2 .wv4.wave,
+.waveStrength-2 .wv3.wave,
+.waveStrength-1 .wv4.wave,
+.waveStrength-1 .wv3.wave,
+.waveStrength-1 .wv2.wave {
+	border-top-color: #eee;
+}
+
+.signal-wrapper {
+  transform: scale(0.6); /* Try 0.8, 1.0, 1.2 etc. */
+  display: inline-block;
+}
+
+</style>
+</head>
+<body>
+
+<h1>HERSCHEL PORTAL</h1>
+
+<form action='/set' method='POST'>
+<label for='ssid'>WiFi SSID:</label>
+<input type='text' name='ssid' id='ssid' required>
+<label for='password'>WiFi Password:</label>
+<input type='password' name='password' id='password'>
+<input type='submit' value='Connect'>
+</form>
+
+<div class='networks'>
+<button onclick='loadNetworks()'>🔍 Scan for Available Networks</button>
+<div id='networks'><div id='loader' style='display:none;'><div class='spinner'></div><p>Scanning...</p></div></div>
+</div>
+
+<script>
+function getSignalIcon(rssi) {
+  let strengthClass = 'waveStrength-0';
+  if (rssi >= -50) strengthClass = 'waveStrength-3';
+  else if (rssi >= -60) strengthClass = 'waveStrength-2';
+  else if (rssi >= -70) strengthClass = 'waveStrength-1';
+  else strengthClass = 'waveStrength-0';
+
+  return `
+    <div class="signal-wrapper ${strengthClass}">
+      <div class="wv4 wave">
+        <div class="wv3 wave">
+          <div class="wv2 wave">
+            <div class="wv1 wave"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getSignalQualityLabel(rssi) {
+  if (rssi >= -50) return 'Very High';
+  else if (rssi >= -60) return 'High';
+  else if (rssi >= -70) return 'Medium';
+  else if (rssi >= -80) return 'Low';
+  else return 'Very Low';
+}
+
+function loadNetworks() {
+  const networksDiv = document.getElementById('networks');
+  networksDiv.innerHTML = `<div id='loader'><div class='spinner'></div><p>Scanning...</p></div>`;
+  fetch('/scan_results')
+    .then(response => response.json())
+    .then(data => {
+      let html = '<ul>';
+      data.networks.forEach(n => {
+        const icon = getSignalIcon(n.rssi);
+        const quality = getSignalQualityLabel(n.rssi);
+        const lock = n.auth !== 0 ? '<span class=\\\"locked\\\">🔒</span>' : '';
+        html += `<li onclick='fillSSID(\\\"${n.ssid}\\\")'>
+          <div class='top'>
+            <span>${n.ssid} ${lock}</span>
+            <span class='signal-icon'>${icon}</span>
+          </div>
+          <div class='details'>${quality} Signal</div>
+        </li>`;
+      });
+      html += '</ul>';
+      networksDiv.innerHTML = html;
+    })
+    .catch(err => {
+      networksDiv.innerHTML = '<p style=\\\"color:red\\\">Failed to load networks.</p>';
+      console.error('Error fetching networks:', err);
+    });
+}
+
+function fillSSID(ssid) {
+  document.getElementById('ssid').value = ssid;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+
+</body></html>

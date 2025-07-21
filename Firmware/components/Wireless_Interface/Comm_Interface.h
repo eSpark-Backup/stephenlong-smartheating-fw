@@ -118,10 +118,7 @@ uint8_t parse_command(uint8_t *data, int len , const char *property);
 esp_err_t send_ble_notification(esp_err_t status, uint8_t *data, uint16_t len, uint8_t notify_enum);
 void send_ble_temperature_notification(float ambient_temp, float object_temp);
 void send_ble_presence_notification(uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
-// void send_temperature_stream_notification(uint32_t timestamp, float ambient_temp, float object_temp);
-// esp_err_t send_wifi_ssid_JSON_notification(const char* wifiSSIDJSON);
-// void send_presence_stream_notification(uint32_t timestamp, uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy);
-// void send_wifi_status_notification(const char *json_status);
+
 
 // Client State Management Functions (auto-streaming enabled)
 void update_cccd_state(uint16_t conn_id, uint16_t handle, uint16_t value);

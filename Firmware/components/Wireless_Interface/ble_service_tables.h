@@ -5,7 +5,7 @@
 
 
 #define CHAR_DECLARATION_SIZE (sizeof(uint8_t))
-#define CHAR_VAL_LEN_MAX 512
+#define CHAR_VAL_LEN_MAX      512
 
 // WiFi Provisioning Service Table Enums
 enum {
