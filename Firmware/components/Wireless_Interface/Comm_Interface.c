@@ -508,13 +508,7 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             }
             wifiScanAction=true;
             ESP_LOGI(TAG, "WIFI_SCAN command received");
-                // Create the task for the IR sensor
-            if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
-            {
-                ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
-                break;
-            }
-
+            break;
 
         default:
             blecmd = NO_COMMAND;

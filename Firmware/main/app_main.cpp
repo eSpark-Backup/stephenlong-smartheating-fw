@@ -588,6 +588,14 @@ void execute_command(void)
         break;
     }
 
+    case WIFI_SCAN:{
+        if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
+            break;
+        }
+    }
+
     default:
         ESP_LOGE(DEVICE_TAG, "Invalid command received: %X", blecmd);
         send_ble_notification(ESP_FAIL, NULL, 0, NOTIFY_RESPONSE);
@@ -954,12 +962,11 @@ extern "C" void app_main(void)
     // heater_interface_init();
 
    
-    // // set_heater_temp(27.5);
-    // // set_heater_mode(AUTO_MODE);
+    // set_heater_temp(27.5);
+    // set_heater_mode(AUTO_MODE);
     
     comm_init();
-   
-    
+
     // // Create WiFi monitoring task for BLE auto-streaming
     // if(xTaskCreate(wifi_monitoring_task, "WiFi_Monitor_Task", 4096, NULL, 1, NULL) != pdPASS)
     // {
@@ -973,9 +980,9 @@ extern "C" void app_main(void)
     // if (strlen(device_data.ssid) != 0 || strlen(device_data.password) != 0)
     // {
     //     ESP_LOGI(DEVICE_TAG, "Connecting to saved WiFi: %s\tPassword: %s", device_data.ssid, device_data.password);
-    //     wifi_init_sta(device_data.ssid, device_data.password);
+        wifi_init_sta(device_data.ssid, device_data.password);
     //     vTaskDelay(pdMS_TO_TICKS(500)); 
-    //     thingsBoard_init();
+    //     // thingsBoard_init();
     // }
     // else
     // {
@@ -983,7 +990,6 @@ extern "C" void app_main(void)
     //     start_softap_provisioning();
     //     ESP_LOGI(DEVICE_TAG, "Starting BLE for provisioning");
     // }
-    start_softap_provisioning();
 }
 
 const char* get_enum_name(ENUM_TYPE type, int value)
@@ -1037,6 +1043,7 @@ const char* get_enum_name(ENUM_TYPE type, int value)
                 case READ_ENERGY_METRICS:      return "READ_ENERGY_METRICS";
                 case CONTROL_FRONT_LED:        return "CONTROL_FRONT_LED";
                 case READ_DEVICE_INFO:         return "READ_DEVICE_INFO";
+                case WIFI_SCAN:                return "WIFI_SCAN";
                 case MAX_BLE_CMDS:             return "MAX_BLE_CMDS";
                 default: return "UNKNOWN_BLE_COMMAND";
             }
