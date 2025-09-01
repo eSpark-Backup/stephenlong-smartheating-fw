@@ -6,6 +6,7 @@
 // #define UART_RX_PIN        GPIO_NUM_6
 #define UART_RX_PIN        GPIO_NUM_4
 
+#define TAG "LD2410_DRIVER"
 namespace LD2410
 {
   const char *tStatus[7]{

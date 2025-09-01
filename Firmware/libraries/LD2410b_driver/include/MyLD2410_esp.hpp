@@ -24,8 +24,6 @@
 // #define UART_BUF_SIZE      (1024)
 
 
-#define TAG "LD2410_DRIVER"
-
 typedef uint8_t byte;
 
 /**

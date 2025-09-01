@@ -2,7 +2,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_mac.h"
-#include "app.h"
+#include "Storage_interface.h"
 #include "status_led.h"
 #include "MLX90614_interface.h"
 #include "LD2410_interface.hpp"
@@ -37,8 +37,9 @@ esp_err_t thingsBoard_init(void)
     if(xTaskCreate(thingsBoard_task, "ThingsBoard_Task", 1024*6, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(HTTPS_TAG, "Failed to create ThingsBoard task");
+        // set_device_status(1, ERROR);
         set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW);
-        set_device_status(1, ERROR);
+        // set_led_status_flag();
         return ESP_FAIL;
     }
     ESP_LOGD(HTTPS_TAG, "ThingsBoard task created successfully");
@@ -57,7 +58,7 @@ void thingsBoard_task(void *pvParameters)
     snprintf(mac_str, sizeof(mac_str), "%02X%02X%02X%02X%02X%02X",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    if(get_device_credentials(tokenKey) == ESP_OK) isDeviceProvisioned = true;
+    if(get_device_thingsboard_credentials(tokenKey) == ESP_OK) isDeviceProvisioned = true;
 
     while (true)
     {
@@ -73,7 +74,7 @@ void thingsBoard_task(void *pvParameters)
         if (!isDeviceProvisioned) {
             if (provision_device(tokenKey, sizeof(tokenKey), mac_str) == ESP_OK) {
                 isDeviceProvisioned = true;
-                save_device_credentials(tokenKey);
+                save_device_thingsboard_credentials(tokenKey);
                 ESP_LOGD(HTTPS_TAG, "Provisioning successful. Token: %s", tokenKey);
 
                 // Send device attributes after successful provisioning

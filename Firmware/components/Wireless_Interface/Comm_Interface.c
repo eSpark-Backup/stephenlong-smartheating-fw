@@ -8,7 +8,6 @@
 // BLE streaming structures defined in ble.c - no need for duplicates
 
 #define TAG "COMM_INTERFACE"
-#define COMM_INTERFACE_BLETAG "COMM_INTERFACE"
 
 #define CHECK_PROPERTY(property)                \
     if(!property) {                           \
@@ -26,23 +25,19 @@ static esp_ble_bond_dev_t *bond_dev_list = NULL;
 
 bool uart_cmd_handler_flag = false;
     
-wifi_ap_record_t ap_info[20]; // max 20 APs
-ScanWifi filteredNetworks[20];
 const char* wifiSSIDJSON;
-uint16_t ap_count = 0;
-uint16_t number = 20;
 uint16_t scanStartTime;
 uint16_t scanFinishedTime;
 uint16_t scanProgesstime;
 uint16_t totalScanTime;
-uint8_t filteredNetworksCount = 0;
+// uint8_t filteredNetworksCount = 0;
 
 TaskHandle_t xWifiScanTaskHandle = NULL;
 TaskHandle_t xWifiScanDurationHandle= NULL;
 
 bool wifiScanAction = false;
 bool scanStart=false;
-bool scanfinsihed=false;
+bool scanFinished=false;
 bool scanInProgress=false;
 
 
@@ -70,7 +65,7 @@ char *cmdStringFetch[]  = {
 
 void wifi_scan_task(void *pvParameters)
 {
-    if(scan_wifi_ssids() != ESP_OK)
+    if(scan_wifi_ssids() != ESP_OK)                 // no need for retry mechanism
     {
         ESP_LOGE(TAG " WIFI SCAN", "WIFI SCAN FAILED");
     }
@@ -95,9 +90,9 @@ void scanDuration_task (void *pvParameters)
             scanProgesstime = US_TO_SEC(esp_timer_get_time()) - scanStartTime;
             ESP_LOGI(TAG " WIFI SCAN", "Scan in Progress ! Time: %d", scanProgesstime);
         }
-        else if(scanfinsihed)
+        else if(scanFinished)
         {   
-            scanfinsihed = false;
+            scanFinished = false;
             scanFinishedTime = US_TO_SEC(esp_timer_get_time());
             totalScanTime= scanFinishedTime -scanStartTime;
             ESP_LOGI(TAG " WIFI SCAN", "Total Wifi Scan time: %d seconds", totalScanTime);
@@ -138,17 +133,12 @@ void comm_init(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-
-
     start_ble();
-
-
-
-    if(xTaskCreate(ble_command_task, "ble_command_task", 4096, NULL, 1, NULL) != pdPASS)
+    if(xTaskCreate(ble_command_task, "ble_command_task", 1024*4, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create ble_command_task  task");
         set_led_effect(LED_EFFECT_BLINK, RED ,LED_SPEED_SLOW );
-        set_device_status(1, ERROR);
+        // set_device_status(1, ERROR);
         return;
     }
     ESP_LOGD(TAG, "ble_command_task created successfully");
@@ -205,26 +195,26 @@ void start_ble(void)
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret)
     {
-        ESP_LOGE(TAG GATTS_TAG, "%s initialize controller failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(TAG GATTS_TAG, "%s initialize controller failed: %s", __func__, esp_err_to_name(ret));
         return;
     }
 
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
     if (ret)
     {
-        ESP_LOGE(TAG GATTS_TAG, "%s enable controller failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(TAG GATTS_TAG, "%s enable controller failed: %s", __func__, esp_err_to_name(ret));
         return;
     }
     ret = esp_bluedroid_init();
     if (ret)
     {
-        ESP_LOGE(TAG GATTS_TAG, "%s init bluetooth failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(TAG GATTS_TAG, "%s init bluetooth failed: %s", __func__, esp_err_to_name(ret));
         return;
     }
     ret = esp_bluedroid_enable();
     if (ret)
     {
-        ESP_LOGE(TAG GATTS_TAG, "%s enable bluetooth failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(TAG GATTS_TAG, "%s enable bluetooth failed: %s", __func__, esp_err_to_name(ret));
         return;
     }
 
@@ -358,6 +348,8 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     bool allow_all = (strcmp(property, "uart") == 0) || (strcmp(property, "ble") == 0);
     // bool cmd_wifi = (strcmp(property, "wifi") == 0);
     // bool cmd_uart = (strcmp(property, "uart") == 0);
+
+    // bleParameters will be freed in execute_comamnd function in app_main.c file
 
     // Extract property value
     switch (blecmd){
@@ -513,20 +505,12 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
             }
             wifiScanAction=true;
             ESP_LOGI(TAG, "WIFI_SCAN command received");
-                // Create the task for the IR sensor
-            if(xTaskCreate(wifi_scan_task, "wifi_scan_task", 4096, NULL, 1, &xWifiScanTaskHandle) != pdPASS)
-            {
-                ESP_LOGE(TAG, "Failed to create wifi_scan_task  task");
-                break;
-            }
-
+            break;
 
         default:
             blecmd = NO_COMMAND;
             break;
     }
-
-
 
     if((blecmd < 1) || (blecmd >= MAX_BLE_CMDS))
     {
@@ -543,58 +527,15 @@ uint8_t parse_command(uint8_t *data, int len, const char *property)
     return blecmd;
 }
 
-void send_ble_uart_notification(esp_err_t status, uint8_t *data, uint16_t len)
-{
-    uint8_t resp[1 + ((len == 0) ? 1: len)];
-    ESP_LOGI(TAG GATTS_TAG, "Sending BLE response for command 0x%02X, status=%d, len=%d", blecmd, status, len);
-    ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: len %d", len);
-
-    resp[0] = blecmd;
-    if(data != NULL)
-    {
-        ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: data %s", data);
-        memcpy(&resp[1], data, len);
-        ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: resp");
-        ESP_LOG_BUFFER_HEXDUMP(TAG GATTS_TAG, resp, len + 1, ESP_LOG_INFO);
-    }
-    else
-    {
-        resp[1] = (status == ESP_OK) ? BLE_RESPONSE_SUCCESS : BLE_RESPONSE_FAIL;
-        ESP_LOGD(TAG GATTS_TAG, "send_ble_uart_notification: resp %02X %02X", resp[0], resp[1]);
-    }
-
-    // Send to all active clients using the multi-client approach from ble.c
-    int notifications_sent = 0;
-
-    ESP_LOGD(TAG GATTS_TAG, "Sending BLE response: status=%d, len=%d, using handle=%d", 
-             status, len, herschel_handle_table[IDX_RESPONSE_VAL]);
-
-    for (int i = 0; i < MAX_BLE_CLIENTS; i++) {
-        if (client_states[i].is_active) {
-            esp_err_t err = esp_ble_gatts_send_indicate(
-                client_states[i].gatts_if,
-                client_states[i].conn_id,
-                herschel_handle_table[IDX_RESPONSE_VAL],
-                sizeof(resp), resp, false);
-            if (err == ESP_OK) {
-                notifications_sent++;
-                ESP_LOGD(TAG GATTS_TAG, "BLE response sent to client %d successfully", i);
-            } else {
-                ESP_LOGE(TAG GATTS_TAG, "Failed to send BLE notification to client %d, error: %s", i, esp_err_to_name(err));
-            }
-        }
-    }
-
-    if (notifications_sent == 0) {
-        ESP_LOGW(TAG GATTS_TAG, "No active BLE clients to send notification to");
-    } else {
-        ESP_LOGI(TAG GATTS_TAG, "BLE response sent to %d clients", notifications_sent);
-    }
-}
-
 // WiFi
 void wifi_init_sta(const char *ssid, const char *password)
 {
+    // Check for null pointers to prevent crashes
+    if (ssid == NULL || password == NULL) {
+        ESP_LOGE(TAG WIFI_TAG, "wifi_init_sta: ssid or password is NULL");
+        return;
+    }
+
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
 
@@ -602,12 +543,6 @@ void wifi_init_sta(const char *ssid, const char *password)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &instance_got_ip));
 
     wifi_config_t wifi_config = {0};
-    
-    // Check for null pointers to prevent crashes
-    if (ssid == NULL || password == NULL) {
-        ESP_LOGE(TAG WIFI_TAG, "wifi_init_sta: ssid or password is NULL");
-        return;
-    }
     
     strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
     strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
@@ -619,70 +554,49 @@ void wifi_init_sta(const char *ssid, const char *password)
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
-esp_err_t load_wifi_credentials(char *ssid, char *password)
-{
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READONLY, &nvs);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG WIFI_TAG, "No saved credentials found");
-        return err;
-    }
-
-    size_t ssid_len = WIFI_SSID_MAX_LEN, pass_len = WIFI_PASS_MAX_LEN;
-    nvs_get_str(nvs, "ssid", ssid, &ssid_len);
-    nvs_get_str(nvs, "password", password, &pass_len);
-    nvs_close(nvs);
-    return ESP_OK;
-}
-
-esp_err_t save_wifi_credentials(const char *ssid, const char *password)
-{
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open(NVS_NAMESPACE_WIFIDATA, NVS_READWRITE, &nvs);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG WIFI_TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    nvs_set_str(nvs, "ssid", ssid);
-    nvs_set_str(nvs, "password", password);
-    nvs_commit(nvs);
-    nvs_close(nvs);
-    ESP_LOGI(TAG WIFI_TAG, "WiFi credentials saved");
-    return ESP_OK;
-}
-
-
-esp_err_t send_ble_wifi_SSID_JSON_notification(const char* wifiSSIDJSON )
-{
-    if(xWifiScanTaskHandle != NULL)
-    {
-        ESP_LOGW(TAG  " WIFI SCAN", "Sending Wifi SSID JSON on BLE Indicate");
-        if(send_wifi_ssid_JSON_notification(wifiSSIDJSON) == ESP_OK)
-        {
-            return ESP_OK;
-        }
-        else{
-            return ESP_FAIL;
-        }
-    }
-    return ESP_FAIL;
-}
+// esp_err_t send_ble_wifi_SSID_JSON_notification(const char* wifiSSIDJSON )
+// {
+//     if(xWifiScanTaskHandle != NULL)
+//     {
+//         ESP_LOGW(TAG  " WIFI SCAN", "Sending Wifi SSID JSON on BLE Indicate");
+//         if(send_wifi_ssid_JSON_notification(wifiSSIDJSON) == ESP_OK)
+//         {
+//             return ESP_OK;
+//         }
+//         else{
+//             return ESP_FAIL;
+//         }
+//     }
+//     return ESP_FAIL;
+// }
 
 // BLE Temperature Data Streaming (12 bytes) - uses CCCD management
 void send_ble_temperature_notification(float ambient_temp, float object_temp)
 {
-    // Use the advanced streaming function with current timestamp
-    send_temperature_stream_notification((uint32_t)time(NULL), ambient_temp, object_temp);
+    // // Use the advanced streaming function with current timestamp
+    // send_temperature_stream_notification((uint32_t)time(NULL), ambient_temp, object_temp);
+    temp_stream_packet_t temp_packet = {
+        .timestamp = (uint32_t)time(NULL),
+        .ambient_temp = ambient_temp,
+        .object_temp = object_temp
+    };
+    send_ble_notification(ESP_OK, (uint8_t*)&temp_packet, sizeof(temp_stream_packet_t), NOTIFY_TEMPERATURE);
 }
 
 // BLE Presence Data Streaming (18 bytes) - uses CCCD management
 void send_ble_presence_notification(uint8_t has_target, float move_dist, float still_dist, uint8_t move_energy, uint8_t still_energy)
 {
-    // Use the advanced streaming function with current timestamp
-    send_presence_stream_notification((uint32_t)time(NULL), has_target, move_dist, still_dist, move_energy, still_energy);
+    // // Use the advanced streaming function with current timestamp
+    // send_presence_stream_notification((uint32_t)time(NULL), has_target, move_dist, still_dist, move_energy, still_energy);
+    presence_stream_packet_t presence_packet = {
+        .timestamp = (uint32_t)time(NULL),
+        .has_target = has_target,
+        .move_dist = move_dist,
+        .still_dist = still_dist,
+        .move_energy = move_energy,
+        .still_energy = still_energy
+    };
+    send_ble_notification(ESP_OK, (uint8_t*)&presence_packet, sizeof(presence_stream_packet_t), NOTIFY_PRESENCE);
 }
 
 // WiFi Status Reading Function
@@ -802,6 +716,10 @@ const char* get_SSID_auth_mode(uint8_t authmode)
 char* create_wifi_scan_json(ScanWifi *networks, int count) {
     // Root object
     cJSON *root = cJSON_CreateObject();
+    if(root == NULL) {
+        ESP_LOGE(TAG, "Failed to create cJSON root object");
+        return NULL; // Handle memory allocation failure
+    }
     cJSON_AddStringToObject(root, "action", "scan_result");
 
     // Array of networks
@@ -842,6 +760,11 @@ esp_err_t scan_wifi_ssids()
         ESP_LOGE(TAG, "Failed to create heater interface task");
     }
 
+    wifi_ap_record_t ap_info[20]; // max 20 APs
+    ScanWifi filteredNetworks[20];
+    uint16_t ap_count = 0;
+    uint16_t number = 20;
+    uint8_t filteredNetworksCount = 0;
     scanStart=true;
     ESP_ERROR_CHECK(esp_wifi_scan_start(&scan_config, true)); // Blocking scan
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
@@ -872,24 +795,28 @@ esp_err_t scan_wifi_ssids()
     }
     
     ESP_LOGI(TAG " WIFI SCAN", "Filtered count: %d", filteredNetworksCount);
+    if (wifiSSIDJSON != NULL) {
+        free(wifiSSIDJSON);
+        wifiSSIDJSON = NULL;
+    }
     wifiSSIDJSON = create_wifi_scan_json(filteredNetworks ,filteredNetworksCount);
     ESP_LOGI(TAG " WIFI SCAN", "SSID JSON: %s",wifiSSIDJSON);
     scanInProgress=false;
-    scanfinsihed=true;
+    scanFinished=true;
     
-    if(wifiScanAction) // if scan triggered from BLE
+    if(wifiScanAction && wifiSSIDJSON) // if scan triggered from BLE
     {
-        if(send_ble_wifi_SSID_JSON_notification(wifiSSIDJSON) == ESP_OK)
+        wifiScanAction=false;
+        if(send_ble_notification(ESP_OK, wifiSSIDJSON, strlen(wifiSSIDJSON), NOTIFY_CONTROL) == ESP_OK)
         {   
             ESP_LOGI(TAG " WIFI SCAN", "Successfully Sent Network Scan Notification");
-            wifiScanAction=false;
             return ESP_OK;
         }
-        else{   
+        else{       // if notification failed than return ESP_FAIL because we cant connect to BLE probably
             ESP_LOGE(TAG " WIFI SCAN", "Failed to Send Network Scan Notification");
-            wifiScanAction=false;
             return ESP_FAIL; 
         }
     }
+    // filteredNetworksCount = 0; // Reset for next scan
     return ESP_OK;
 }

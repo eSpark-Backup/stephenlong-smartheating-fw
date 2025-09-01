@@ -20,8 +20,6 @@ extern "C" {
 
 #define BUFFER_SIZE 5
 
-
-
 typedef struct {
     float buffer[BUFFER_SIZE]; // You can change `float` to whatever sensor data type you use
     int head;    // Index for the next write

@@ -7,6 +7,8 @@
 #include <esp_log.h>
 #include <hal/i2c_types.h>
 
+#define DEVICE_TEST
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,7 +18,7 @@ extern "C" {
 
 // Device Attributes for ThingsBoard - HC-1200-VP Standard Configuration
 #define DEVICE_MODEL                "HC-1200-VP"
-#define FIRMWARE_VERSION            "1.0.0"
+#define FIRMWARE_VERSION            "1.1.2"
 #define HARDWARE_VERSION            "ESP32-C6"
 #define RATED_VOLTAGE               "240V AC"
 #define INSTALLATION_TYPE           "wall-mount"
@@ -27,62 +29,65 @@ extern "C" {
 
 #define IR_SENSOR_I2C_INTERFACE     I2C_NUM_0
 #define IR_SENSOR_I2C_ADDR1         0x5A         // Default sensor slave address
-#define IR_SENSOR_SDA_IO            21
-#define IR_SENSOR_SCL_IO            22
+#define IR_SENSOR_SDA_IO            GPIO_NUM_21
+#define IR_SENSOR_SCL_IO            GPIO_NUM_22
 #define MAX_TEMP_VAL                125.00f
 #define MIN_TEMP_VAL                -40.00f
-#define SENSOR_BOARD_RESTART_COUNT   10
+#define SENSOR_BOARD_RESTART_COUNT  10
 
 // UI temperature range constants
 #define UI_MIN_TEMP_CELSIUS         0.0f    // 0°C minimum for UI
 #define UI_MAX_TEMP_CELSIUS         35.0f   // 35°C maximum for UI
 
 #define MOTION_SENSOR_IO            GPIO_NUM_23
-#define HEATER_HIGH_IO              19
-#define HEATER_LOW_IO               18
+#define HEATER_HIGH_IO              GPIO_NUM_19
+#define HEATER_LOW_IO               GPIO_NUM_18
 
-#define STATUS_LED_IO               11
-// #define STATUS_LED_IO               GPIO_NUM_8
+#ifdef DEVICE_TEST
+#define STATUS_LED_IO               GPIO_NUM_8
+#else
+#define STATUS_LED_IO               GPIO_NUM_11
+#endif
 
 // Minutes
-#define MIN_TO_MS(x)   ((x) * 60 * 1000ULL)
-#define MIN_TO_US(x)   ((x) * 60 * 1000000ULL)
+#define MIN_TO_MS(x)                ((x) * 60 * 1000ULL)
+#define MIN_TO_US(x)                ((x) * 60 * 1000000ULL)
 
 // Seconds
-#define SEC_TO_MS(x)   ((x) * 1000ULL)
-#define SEC_TO_US(x)   ((x) * 1000000ULL)
+#define SEC_TO_MS(x)                ((x) * 1000ULL)
+#define SEC_TO_US(x)                ((x) * 1000000ULL)
 
 // Milliseconds
-#define MS_TO_US(x)    ((x) * 1000ULL)
-#define MS_TO_SEC(x)   ((x) / 1000ULL)
-#define MS_TO_MIN(x)   ((x) / (60 * 1000ULL))
+#define MS_TO_US(x)                 ((x) * 1000ULL)
+#define MS_TO_SEC(x)                ((x) / 1000ULL)
+#define MS_TO_MIN(x)                ((x) / (60 * 1000ULL))
 
 // Microseconds
-#define US_TO_MS(x)    ((x) / 1000ULL)
-#define US_TO_SEC(x)   ((x) / 1000000ULL)
-#define US_TO_MIN(x)   ((x) / (60 * 1000000ULL))
+#define US_TO_MS(x)                 ((x) / 1000ULL)
+#define US_TO_SEC(x)                ((x) / 1000000ULL)
+#define US_TO_MIN(x)                ((x) / (60 * 1000000ULL))
 
 
 // Single press duration thresholds (in seconds)
-#define BUTTON_BLE_PAIRING_MIN_DURATION     5    // 5-10s = BLE pairing mode
-#define BUTTON_BLE_PAIRING_MAX_DURATION     10
-#define BUTTON_FACTORY_RESET_MIN_DURATION   10   // 10-30s = Factory reset confirmation
-#define BUTTON_FACTORY_RESET_MAX_DURATION   30
-#define BUTTON_BYPASS_MODE_MIN_DURATION     30   // 30s+ = Bypass mode (technician only)
+#define BUTTON_BLE_PAIRING_MIN_DURATION     SEC_TO_US(5)    // 5-10s = BLE pairing mode
+#define BUTTON_BLE_PAIRING_MAX_DURATION     SEC_TO_US(10)
+#define BUTTON_FACTORY_RESET_MIN_DURATION   SEC_TO_US(10)   // 10-30s = Factory reset confirmation
+#define BUTTON_FACTORY_RESET_MAX_DURATION   SEC_TO_US(30)
+#define BUTTON_BYPASS_MODE_MIN_DURATION     SEC_TO_US(30)   // 30s+ = Bypass mode (technician only)
 
 // Double-click detection (in milliseconds)
-#define BUTTON_DOUBLE_CLICK_MAX_INTERVAL    500  // 500ms max between clicks
-#define BUTTON_DEBOUNCE_MS                  50   // Debounce time
+#define BUTTON_DOUBLE_CLICK_MAX_INTERVAL    MS_TO_US(500)   // 500ms max between clicks
+#define BUTTON_DEBOUNCE_MS                  MS_TO_US(50)    // 50ms Debounce time
 
-// Factory reset confirmation (in milliseconds)
-#define FACTORY_RESET_CONFIRMATION_TIMEOUT 5000 // 5 seconds to confirm
+// Factory reset confirmation
+#define FACTORY_RESET_CONFIRMATION_TIMEOUT  SEC_TO_US(5) // 5 seconds to confirm
 
 // BLE pairing timeout (in milliseconds)
 #define BLE_PAIRING_TIMEOUT         MIN_TO_US(1) //1 mins
 #define SOFT_AP_TIMEOUT             MIN_TO_US(5) //5 mins
 
 #define BUTTON_GPIO                 GPIO_NUM_2   // <-- Your GPIO pin
-#define GND_SW                      GPIO_NUM_10     //Ground switch
+#define GND_SW                      GPIO_NUM_10  // Sensor board ground switch
 #define GPIO_PIN_MASK(x)            (1ULL<<x)
 
 #define AP_RECONN_ATTEMPTS          5
@@ -93,19 +98,29 @@ extern "C" {
 #define WIFI_PASS_MAX_LEN           64
 #define CREDENTIAL_VALUE            128
 
+#ifdef DEVICE_TEST
+#define TEST_AP_SSID                "eSpark Wifi"
+#define TEST_AP_PASS                "47356880"
+#endif
+
 #define DEVICE_TAG                  "APP"
-#define GPIO_TAG                    "GPIO"
+#define STORAGE_TAG                 "_Storage"
+#define GPIO_TAG                    "_GPIO"
 #define WIFI_TAG                    "_SoftAP"
 #define GATTS_TAG                   "_BLE"
 #define ISR_TAG                     "_ISR"
-#define HTTPS_TAG                   "ThingsBoard"
+#define HTTPS_TAG                   "_ThingsBoard"
+#define LED_TAG                     "_LED_Strip"
 
-// #define LD2410_UART_TX 17
-// #define LD2410_UART_RX 16
-#define LD2410_UART_TX 17
-#define LD2410_UART_RX 16
-#define LD2410_BAUD 256000
-#define LD2410_UART_PORT UART_NUM_1
+#ifdef DEVICE_TEST
+#define LD2410_UART_TX              GPIO_NUM_7
+#define LD2410_UART_RX              GPIO_NUM_6
+#else
+#define LD2410_UART_TX              GPIO_NUM_17
+#define LD2410_UART_RX              GPIO_NUM_16
+#endif
+#define LD2410_BAUD                 256000
+#define LD2410_UART_PORT            UART_NUM_1
 
 
 #define BLE_RESPONSE_SUCCESS        0xA1
@@ -124,37 +139,39 @@ extern "C" {
 #define CONFIG_SET_RAW_ADV_DATA     0
 #define BLE_PAIR_ENCRYPTION_KEY     16
 
+
+// These should not be longer than 16 characters?
 #define NVS_NAMESPACE_DEVICEDATA        "device_data"
-#define NVS_NAMESPACE_WIFIDATA          "wifi_storage"
-#define NVS_NAMESPACE_DEVICE_HTTPS_DATA "https_dev_data"
-#define NVS_KEY_SSID                    "ssid"
-#define NVS_KEY_PASSWORD                "password"
 #define NVS_KEY_MODE                    "mode"
 #define NVS_KEY_TARGET_TEMP             "target_temp"
-#define NVS_KEY_DETECTION_DURATION      "detection_duration"
+#define NVS_KEY_DETECTION_DURATION      "detection_dur"
+#define NVS_NAMESPACE_WIFIDATA          "wifi_storage"
+#define NVS_KEY_SSID                    "ssid"
+#define NVS_KEY_PASSWORD                "password"
+#define NVS_NAMESPACE_DEVICE_HTTPS_DATA "https_dev_data"
+#define NVS_KEY_ACCESS_TOKEN            "access_token"
+#define NVS_NAMESPACE_ENERGYDATA        "energy_data"
+#define NVS_KEY_ENERGY_CONSUMED         "energy_kwh"
+#define NVS_KEY_HEATING_TIME            "heating_time"
+#define NVS_KEY_LAST_UPDATE_TIME        "last_update"
 
 // Energy measurement constants - HC-1200-VP Configuration
-#define HEATING_LOW_WATTS          500.0f   // Watts for edge element (lower power)
-#define HEATING_HIGH_WATTS         700.0f   // Watts for center element (higher power)
-#define ENERGY_UPDATE_INTERVAL_MS  1000     // 1 second intervals for energy calculation
+#define HEATING_LOW_WATTS              500.0f         // Watts for edge element (lower power)
+#define HEATING_HIGH_WATTS             700.0f         // Watts for center element (higher power)
+#define ENERGY_UPDATE_INTERVAL         SEC_TO_US(1)   // 1 second intervals for energy calculation
 
 // Telemetry interval constants (shared between BLE and ThingsBoard)
-#define NORMAL_TELEMETRY_TIME      30       // 30 seconds normal operation
-#define PRESENCE_TELEMETRY_TIME    10       // 10 seconds when presence detected
-#define IDLE_TELEMETRY_TIME        60       // 60 seconds increment when idle
-#define BLE_STREAMING_PRESENCE_TIME    5        // 5 seconds when presence detected
-#define BLE_STREAMING_NORMAL_TIME      30       // 30 seconds normal operation  
-#define BLE_STREAMING_IDLE_TIME        (5*60)   // 5 minutes when idle
-#define BLE_FIRST_MINUTE_TIME      5        // 5 seconds for first minute after BLE connection
-#define BLE_FIRST_MINUTE_DURATION  (60*1000)    // 60 seconds in milliseconds
-#define NO_ACTIVITY_TIME_MS        (10*60*1000)  // 10 minutes in milliseconds
-#define MAX_IDLE_INTERVAL          (10*60)       // 10 minutes max interval
+#define NORMAL_TELEMETRY_TIME          30               // 30 seconds normal operation
+#define PRESENCE_TELEMETRY_TIME        10               // 10 seconds when presence detected
+#define IDLE_TELEMETRY_TIME            60               // 60 seconds increment when idle
+#define BLE_STREAMING_PRESENCE_TIME    5                // 5 seconds when presence detected
+#define BLE_STREAMING_NORMAL_TIME      30               // 30 seconds normal operation  
+#define BLE_STREAMING_IDLE_TIME        (5*60)           // 5 minutes when idle
+#define BLE_FIRST_MINUTE_TIME          5                // 5 seconds for first minute after BLE connection
+#define BLE_FIRST_MINUTE_DURATION      SEC_TO_MS(60)    // 60 seconds in milliseconds
+#define NO_ACTIVITY_TIME_MS            MIN_TO_MS(10)    // 10 minutes in milliseconds
+#define MAX_IDLE_INTERVAL              (10*60)          // 10 minutes max interval
 
-// NVS keys for energy data persistence
-#define NVS_NAMESPACE_ENERGYDATA   "energy_data"
-#define NVS_KEY_ENERGY_CONSUMED    "energy_kwh"
-#define NVS_KEY_HEATING_TIME       "heating_time"
-#define NVS_KEY_LAST_UPDATE_TIME   "last_update"
 
 typedef enum {
     NORMAL_OP = 0x01,
@@ -248,45 +265,18 @@ typedef struct
 } energy_tracking_t;
 
 
-
-// LED Status Flags for centralized LED management
-typedef struct {
-    // Critical errors (highest priority - RED)
-    bool error_critical;
-    bool error_ir_sensor;
-    bool error_heating;
-
-    // Button feedback (high priority - various colors)
-    bool button_ble_feedback;
-    bool button_factory_reset_feedback;
-    bool button_bypass_feedback;
-    bool button_softap_feedback;
-
-    // System operations (medium priority - PURPLE/BLUE)
-    bool pairing_mode_active;
-    bool firmware_update;
-    bool factory_reset_confirmation;
-    bool bypass_mode_active;
-
-    // Normal operation (lowest priority - GREEN/YELLOW)
-    bool normal_operation;
-    bool wifi_connected;
-    bool wifi_warning;
-} led_status_flags_t;
-
 const char* get_enum_name(ENUM_TYPE type, int value);
-void set_device_status(uint8_t op, int bitMask);
+// void set_device_status(uint8_t op, int bitMask);
 // void set_led_effect(led_effect_t effect , COLORS colorSelection , EFFECT_SPEED effectSPEED);
 // led_effect_t get_current_led_effect(void);
 void execute_command(void);
 bool is_button_led_feedback_active(void);
 
-// LED Management System
-void led_manager_init(void);
 void set_led_status_flag(const char* flag_name, bool value);
-led_status_flags_t* get_led_status_flags(void);
+// led_status_flags_t* get_led_status_flags(void);
 
-
+void sensor_board_init(void);
+void set_sensor_board_power(bool enable);
 
 #ifdef __cplusplus
 }

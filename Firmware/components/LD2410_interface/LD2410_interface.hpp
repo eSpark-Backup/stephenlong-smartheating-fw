@@ -2,17 +2,12 @@
 
 #include "MyLD2410_esp.hpp"
 #include "defines.h"
-#include "app.h"
+#include "Storage_interface.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "Comm_Interface.h"
 #include "driver/gpio.h"
-
-
-#undef TAG  // Undefine TAG from MyLD2410_esp.hpp if it exists
-#define TAG "PRESENCE_SENSOR"
-
 
 
 typedef struct {
@@ -32,6 +27,8 @@ typedef struct {
 }SensitivityThresholds;
 
 bool LD2410_init();
+
+// need to change functions names to use same case; snake case
 bool sensorSetup();
 void groundSwitchCheck();
 void setDetectionDuration(uint8_t durationVal);
